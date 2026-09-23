@@ -1,2 +1,1 @@
-get to work niggas 
-we need to win this shit 
+this is readme file of this project 
