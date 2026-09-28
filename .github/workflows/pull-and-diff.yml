@@ -5,22 +5,39 @@ on:
     - cron: '0 */3 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# Scheduled and manual runs share a database; never overlap their baselines.
+concurrency:
+  group: pull-and-diff
+  cancel-in-progress: false
+
 jobs:
   pull-and-diff:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
       - name: Install dependencies
+        # Requires a committed npm package-lock.json at the repository root.
         run: npm ci
+      - name: Generate Prisma client
+        run: npm run prisma:generate
       - name: Run pull and diff
         run: node scripts/pull-and-diff.js
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SERPAPI_KEY_1: ${{ secrets.SERPAPI_KEY_1 }}
           SERPAPI_KEY_2: ${{ secrets.SERPAPI_KEY_2 }}
           SERPAPI_KEY_3: ${{ secrets.SERPAPI_KEY_3 }}
           SERPAPI_KEY_4: ${{ secrets.SERPAPI_KEY_4 }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          ALERT_FROM: ${{ secrets.ALERT_FROM }}
