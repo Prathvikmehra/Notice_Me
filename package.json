@@ -14,7 +14,9 @@
     "backend": "npm --workspace=backend run dev",
     "frontend": "npm --workspace=frontend run dev",
     "prisma:generate": "prisma generate --schema=backend/prisma/schema.prisma",
-    "prisma:migrate": "prisma migrate dev --schema=backend/prisma/schema.prisma"
+    "prisma:migrate": "prisma migrate dev --schema=backend/prisma/schema.prisma",
+    "seed": "node scripts/seed.js",
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
