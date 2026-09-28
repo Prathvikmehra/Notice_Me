@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../backend/src/index.js';
+import { startCronScheduler, processDueTopics } from '../backend/src/services/cronService.js';
 
 function createMockDb() {
   const users = [
@@ -222,3 +223,26 @@ test('User data isolation and search across topics/diffs', async () => {
     assert.equal(deleteRes.status, 403);
   });
 });
+
+test('Cron scheduler initialization and error resilience', async () => {
+  const db = createMockDb();
+  // Safe initialization
+  const task = startCronScheduler(db, { enabled: false });
+  assert.equal(task, null);
+
+  // Calling processDueTopics with mock db succeeds without null-ref errors
+  const res = await processDueTopics({
+    db,
+    client: { pullSnapshot: async () => ({ search: [], news: [] }) },
+    logger: { info: () => {}, error: () => {} },
+  });
+  assert.equal(typeof res.checked, 'number');
+  assert.equal(typeof res.alerted, 'number');
+
+  // Passing null or no db safely throws clear error or falls back
+  await assert.rejects(
+    async () => processDueTopics({ db: { topic: null } }),
+    /Database client with topic model is required/
+  );
+});
+

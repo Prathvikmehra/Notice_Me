@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import createTopicsRouter from './routes/topics.js';
 import createTimelineRouter from './routes/timeline.js';
 import createUserRouter from './routes/user.js';
+import { getDb } from './services/db.js';
 import { startCronScheduler } from './services/cronService.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -29,7 +30,7 @@ if (isEntry && process.env.NODE_ENV !== 'test') {
   const host = process.env.HOST || '127.0.0.1';
   app.listen(port, host, () => {
     console.log(`Backend server running at http://${host}:${port}`);
-    startCronScheduler(null);
+    startCronScheduler(getDb);
   });
 }
 
