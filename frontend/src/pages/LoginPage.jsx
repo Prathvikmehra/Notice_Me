@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase.js';
+import Logo from '../components/Logo.jsx';
 
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -41,9 +42,8 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="brand" style={{ justifyContent: 'center', marginBottom: '20px' }}>
-          <span className="brand-symbol" aria-hidden="true">✳</span>
-          <span>notice<span className="brand-accent">me</span></span>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '26px' }}>
+          <Logo size="large" />
         </div>
         <h2 className="login-heading">{isSignUp ? 'Create your account' : 'Welcome back'}</h2>
         <p className="login-sub">

@@ -4,6 +4,7 @@ import { createTopic, deleteTopic, listTopics, searchTopics } from '../api/clien
 import TopicForm from '../components/TopicForm.jsx';
 import TopicList from '../components/TopicList.jsx';
 import DiffCard from '../components/DiffCard.jsx';
+import Logo from '../components/Logo.jsx';
 import TopicDetail from './TopicDetail.jsx';
 
 export default function Dashboard() {
@@ -79,9 +80,8 @@ export default function Dashboard() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-symbol" aria-hidden="true">✳</span>
-          <span>notice<span className="brand-accent">me</span><small>GAZETTE & NOTICE TRACKER</small></span>
+        <div className="brand" style={{ padding: '0 4px' }}>
+          <Logo />
         </div>
         <div className="sidebar-intro"><span className="live-dot" /> Live SerpApi monitoring</div>
         <TopicList topics={topics} selectedId={selectedId} onSelect={setSelectedId} />

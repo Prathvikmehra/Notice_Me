@@ -107,6 +107,32 @@ a { color: inherit; text-decoration: none; }
   text-transform: uppercase;
 }
 
+/* Brand Logo Neo-Brutalist Micro-interactions */
+.brand-logo-container {
+  transition: transform 0.15s ease;
+}
+.brand-logo-container:hover .logo-icon-box {
+  transform: translate(-2px, -2px) rotate(0deg) !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}
+.brand-logo-container:hover .brand-badge-me {
+  transform: translate(-1px, -1px) rotate(5.5deg) !important;
+  box-shadow: 3.5px 3.5px 0px #000000 !important;
+}
+.brand-beacon-dot {
+  animation: beaconPulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+@keyframes beaconPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.85;
+  }
+}
+
 .sidebar-intro {
   margin: 18px 0 16px;
   padding: 10px 14px;
