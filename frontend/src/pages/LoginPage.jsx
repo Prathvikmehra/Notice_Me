@@ -5,6 +5,7 @@ export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -17,6 +18,9 @@ export default function LoginPage() {
     setMessage('');
     try {
       if (isSignUp) {
+        if (password !== confirmPassword) {
+          throw new Error('Passwords do not match.');
+        }
         const { error } = await supabase.auth.signUp({
           email, password,
           options: { data: { name: name.trim() || undefined } },
@@ -56,11 +60,25 @@ export default function LoginPage() {
           <input id="auth-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
           <label htmlFor="auth-password">Password</label>
           <input id="auth-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" minLength={6} required />
+          {isSignUp && (
+            <>
+              <label htmlFor="auth-confirm-password">Confirm password</label>
+              <input
+                id="auth-confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                minLength={6}
+                required
+              />
+            </>
+          )}
           <button className="button button-primary login-button" disabled={busy} type="submit">{busy ? 'Please wait…' : isSignUp ? 'Sign up' : 'Sign in'}</button>
         </form>
         <p className="login-toggle">
           {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-          <button type="button" className="link-button" onClick={() => { setIsSignUp(!isSignUp); setError(''); setMessage(''); }}>
+          <button type="button" className="link-button" onClick={() => { setIsSignUp(!isSignUp); setConfirmPassword(''); setError(''); setMessage(''); }}>
             {isSignUp ? 'Sign in' : 'Sign up'}
           </button>
         </p>
