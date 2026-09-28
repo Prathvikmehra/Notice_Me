@@ -154,6 +154,8 @@ For a Topic with `alertEmail`, the integration contract is `sendDiffAlert(topic,
 
 Concurrent manual and scheduled runs are serialized. A red run is a collection gap: inspect the failed step before rerunning. Zero tracked topics produces no snapshots; use the count report to catch that setup problem.
 
+If Actions reports `Can't reach database server` for a direct Supabase hostname, check its IP support. Direct endpoints normally require IPv6; use **Supabase → Connect → Session pooler** for an IPv4 connection. Copy the exact pooler host, port, and username from that dialog into the GitHub `DATABASE_URL` secret, replacing the password placeholder with the percent-encoded database password. Do not guess the pooler host from the region. This only changes the workflow secret; teammates can retain their working local connections. See [Supabase connection guidance](https://supabase.com/docs/guides/database/connecting-to-postgres).
+
 ### Validation, quota, and demo evidence
 
 ```bash
