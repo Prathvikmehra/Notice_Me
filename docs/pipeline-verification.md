@@ -28,6 +28,7 @@ The direct hostname resolved to IPv6 only. The GitHub `DATABASE_URL` secret was 
 - [First successful run](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36402371029): seeded/preserved the three initial topics and stored their first snapshots. All 23 tests passed in Actions. The run made six successful SerpApi requests using key index 1; key index 2 was configured but not needed.
 - [Second successful run](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36402485421): stored a second snapshot per topic and exercised comparison with the real diff engine. The returned results were unchanged, so no Diff rows were inserted.
 - [Third successful run](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36402582809): the database report at `2026-09-28T09:18:14.195Z` confirmed three snapshots for each of the three topics (nine total) and zero Diffs. The source results remained unchanged.
+- [Full product workflow run](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36404415086): install, Prisma generation, 26 tests, frontend build, collection, and reporting all passed. Its report at `2026-09-28T09:35:20.472Z` showed four snapshots per topic and zero Diffs.
 - A separate read-only database check confirmed the exact rawData keys, result fields, non-empty arrays, ten-item bounds, valid source URLs, trimmed text, and matching snapshot timestamps for all three topics.
 
 | Topic | Search results in first snapshot | News results in first snapshot |
@@ -41,7 +42,7 @@ These manual runs validate ingestion and unchanged-result handling. Closely spac
 ## Still requires live evidence
 
 - An actual run triggered by the six-hour schedule, not just manual dispatch.
-- Three real, reviewed Diffs overall; the three-snapshots-per-Topic target is already met.
+- Three real, reviewed Diffs overall; the three-snapshots-per-Topic target is already met. Four genuine snapshots per Topic are stored as of the full product run.
 - Optional remaining SerpApi keys 3/4 from the team.
 - SMTP secrets and a real delivery test. `sendDiffAlert(topic, diff)` is implemented and covered by mock transport tests.
 

@@ -98,6 +98,7 @@ test('SMTP service sends a sourced text alert and rejects delivery failures', as
   const createTransport = (settings) => {
     assert.equal(settings.port, 587);
     assert.equal(settings.secure, false);
+    assert.equal(settings.requireTLS, true);
     return { sendMail: async (message) => { sent = message; return { accepted: [topic.alertEmail], rejected: [] }; } };
   };
   assert.equal(await sendDiffAlert(topic, diff, { env, createTransport }), true);

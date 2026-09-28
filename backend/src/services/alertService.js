@@ -21,6 +21,7 @@ export async function sendDiffAlert(topic, diff, { env = process.env, createTran
     host: env.SMTP_HOST,
     port,
     secure: port === 465,
+    requireTLS: port !== 465,
     auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
   });
   const subject = String(topic.name || 'Tracked topic').replace(/[\r\n]/g, ' ').trim();

@@ -22,7 +22,8 @@ const app = createApp();
 const isEntry = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isEntry && process.env.NODE_ENV !== 'test') {
   const port = Number(process.env.PORT || 3000);
-  app.listen(port, () => console.log(`Backend server running on port ${port}`));
+  const host = process.env.HOST || '127.0.0.1';
+  app.listen(port, host, () => console.log(`Backend server running at http://${host}:${port}`));
 }
 
 export default app;

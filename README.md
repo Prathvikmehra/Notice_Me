@@ -126,7 +126,7 @@ npm run frontend
 ```
 *Or navigate to `frontend/` and run `npm run dev` (starts on `http://localhost:5173`).*
 
-Open `http://localhost:5173` to manage topics. The frontend reads `VITE_API_URL` (defaults to `http://localhost:3000`); the backend accepts the local frontend origin by default. Set `FRONTEND_ORIGIN` in the backend environment if you use a different local origin.
+Open `http://localhost:5173` to manage topics. The frontend reads `VITE_API_URL` (defaults to `http://localhost:3000`); the backend binds to `127.0.0.1` and accepts the local frontend origin by default. Set `FRONTEND_ORIGIN` in the backend environment if you use a different local origin.
 
 The dashboard lets you add or remove topics, inspect the newest Search and News sources, read dated changes with citations, and set an alert address. It reads the shared Supabase data through the Express API. A newly added topic will show “Awaiting first pull” until the next scheduled or manual collection. Email addresses can be enabled after SMTP settings are configured.
 
