@@ -1,15 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { createTopic, deleteTopic, listTopics } from '../api/client.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import { createTopic, deleteTopic, listTopics, searchTopics } from '../api/client.js';
 import TopicForm from '../components/TopicForm.jsx';
 import TopicList from '../components/TopicList.jsx';
+import DiffCard from '../components/DiffCard.jsx';
 import TopicDetail from './TopicDetail.jsx';
 
 export default function Dashboard() {
+  const { signOut, user } = useAuth();
   const [topics, setTopics] = useState([]);
   const [selectedId, setSelectedId] = useState(new URLSearchParams(window.location.search).get('topic'));
   const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -33,6 +39,23 @@ export default function Dashboard() {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      setSearchResults(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const timer = setTimeout(() => {
+      searchTopics(trimmed)
+        .then((res) => { setSearchResults(res); })
+        .catch((err) => { setError(err.message); })
+        .finally(() => { setSearching(false); });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   async function add(fields) {
     const topic = await createTopic(fields);
@@ -63,10 +86,98 @@ export default function Dashboard() {
         <div className="sidebar-foot">Powered by live Search + News<br />Checked every three hours</div>
       </aside>
       <main className="main-panel">
-        <header className="topbar"><span>MONITORING DASHBOARD</span><button type="button" className="button button-quiet" onClick={() => setRevision((value) => value + 1)}>↻ Refresh</button></header>
+        <header className="topbar">
+          <span style={{ flexShrink: 0 }}>MONITORING DASHBOARD</span>
+          <div className="topbar-search">
+            <input
+              type="search"
+              placeholder="Search topics & history..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {query && (
+              <button
+                type="button"
+                className="search-clear-btn"
+                onClick={() => setQuery('')}
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+            <span style={{ fontSize: '12px', color: '#6c8476' }}>{user?.email}</span>
+            <button type="button" className="button button-quiet" onClick={() => setRevision((value) => value + 1)}>↻ Refresh</button>
+            <button type="button" className="button button-quiet" onClick={signOut}>Sign out</button>
+          </div>
+        </header>
         {error && <p className="form-error page-error" role="alert">{error}</p>}
-        {loading ? <div className="empty-page">Loading watchlist…</div> : selected ? <TopicDetail key={selected.id} topic={selected} onDelete={remove} onAlertChange={(updated) => setTopics((items) => items.map((item) => item.id === updated.id ? updated : item))} refreshToken={revision} /> : (
-          <div className="empty-page"><span aria-hidden="true">✳</span><h1>Your watchlist starts here</h1><p>Add a topic on the left. Notice Me will collect live sources and show changes over time.</p></div>
+        {query.trim().length >= 2 ? (
+          <div className="search-results-panel">
+            <div className="section-label" style={{ marginBottom: '8px' }}>SEARCH RESULTS</div>
+            <h2>Results for “{query.trim()}”</h2>
+            {searching ? (
+              <div className="empty-state" style={{ marginTop: '20px' }}>Searching topics & update history…</div>
+            ) : (!searchResults?.topics?.length && !searchResults?.diffs?.length) ? (
+              <div className="empty-state" style={{ marginTop: '20px' }}>
+                <span aria-hidden="true">🔍</span>
+                <h3>No matches found</h3>
+                <p>No topics or update summaries matched your query.</p>
+              </div>
+            ) : (
+              <>
+                {Boolean(searchResults?.topics?.length) && (
+                  <section className="search-section">
+                    <h3><span>Matched Topics</span><small>{searchResults.topics.length}</small></h3>
+                    <div className="search-topic-grid">
+                      {searchResults.topics.map((t) => (
+                        <div
+                          key={t.id}
+                          className="search-topic-card"
+                          onClick={() => { setSelectedId(t.id); setQuery(''); }}
+                        >
+                          <strong>{t.name}</strong>
+                          <small>{t.query}</small>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {Boolean(searchResults?.diffs?.length) && (
+                  <section className="search-section">
+                    <h3><span>Matched Updates</span><small>{searchResults.diffs.length}</small></h3>
+                    <div>
+                      {searchResults.diffs.map((d) => (
+                        <div key={d.id} style={{ marginBottom: '16px' }}>
+                          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#25503e', marginBottom: '4px' }}>
+                            Topic: {d.topic?.name || 'Unknown'}
+                          </div>
+                          <DiffCard change={d} />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
+          </div>
+        ) : loading ? (
+          <div className="empty-page">Loading watchlist…</div>
+        ) : selected ? (
+          <TopicDetail
+            key={selected.id}
+            topic={selected}
+            onDelete={remove}
+            onAlertChange={(updated) => setTopics((items) => items.map((item) => item.id === updated.id ? updated : item))}
+            refreshToken={revision}
+          />
+        ) : (
+          <div className="empty-page">
+            <span aria-hidden="true">✳</span>
+            <h1>Your watchlist starts here</h1>
+            <p>Add a topic on the left. Notice Me will collect live sources and show changes over time.</p>
+          </div>
         )}
       </main>
     </div>

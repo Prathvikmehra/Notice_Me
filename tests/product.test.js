@@ -1,16 +1,22 @@
-import { test } from 'node:test';
+import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../backend/src/index.js';
 import { sendDiffAlert, isAlertConfigured } from '../backend/src/services/alertService.js';
 
+const FAKE_USER = { id: 'test-user-001', email: 'test@example.com', name: 'Test', plan: 'free', createdAt: new Date() };
+
 function fakeDatabase() {
   const state = { topics: [], snapshots: [], diffs: [] };
   const db = {
+    user: {
+      upsert: async () => FAKE_USER,
+    },
     topic: {
-      findMany: async () => state.topics,
+      findMany: async ({ where } = {}) => where?.userId ? state.topics.filter((t) => t.userId === where.userId) : state.topics,
       findUnique: async ({ where }) => state.topics.find((item) => item.id === where.id) ?? null,
+      count: async ({ where } = {}) => where?.userId ? state.topics.filter((t) => t.userId === where.userId).length : state.topics.length,
       create: async ({ data }) => {
-        const topic = { id: `topic-${state.topics.length + 1}`, ...data, alertEmail: null, createdAt: new Date() };
+        const topic = { id: `topic-${state.topics.length + 1}`, ...data, alertEmail: null, alertEnabled: false, alertFrequency: '3h', lastAlertedAt: null, createdAt: new Date() };
         state.topics.push(topic);
         return topic;
       },
@@ -26,7 +32,7 @@ function fakeDatabase() {
       deleteMany: async ({ where }) => { state.snapshots = state.snapshots.filter((item) => item.topicId !== where.topicId); },
     },
     diff: {
-      findMany: async ({ where }) => state.diffs.filter((item) => item.topicId === where.topicId).sort((a, b) => b.detectedAt - a.detectedAt),
+      findMany: async ({ where }) => state.diffs.filter((item) => item.topicId === (where.topicId || where.topic?.userId && state.topics.find((t) => t.userId === where.topic.userId)?.id)).sort((a, b) => b.detectedAt - a.detectedAt),
       deleteMany: async ({ where }) => { state.diffs = state.diffs.filter((item) => item.topicId !== where.topicId); },
     },
     async $transaction(fn) { return fn(this); },
@@ -35,7 +41,10 @@ function fakeDatabase() {
 }
 
 async function withApi(db, fn) {
-  const server = createApp(db).listen(0);
+  const app = createApp(db, {
+    auth: (req, res, next) => { req.user = FAKE_USER; next(); },
+  });
+  const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   const call = async (path, method = 'GET', body) => {
     const response = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });

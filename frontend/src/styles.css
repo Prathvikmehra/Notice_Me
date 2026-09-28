@@ -99,3 +99,30 @@ h1 { font-size: clamp(30px, 3.3vw, 48px); line-height: 1.12; letter-spacing: -.0
 .empty-page h1 { color: #234133; }
 @media (max-width: 900px) { .app-shell { grid-template-columns: 265px minmax(0, 1fr); } .sidebar { padding-left: 12px; padding-right: 12px; } .detail { padding-top: 37px; } .settings-card { grid-template-columns: 1fr; } }
 @media (max-width: 680px) { .app-shell { display: block; } .sidebar { min-height: 0; padding: 22px 16px; } .sidebar-intro { margin: 19px 12px; } .topic-nav { margin-bottom: 14px; } .topic-form { padding-top: 15px; } .sidebar-foot { display: none; } .topbar { height: 60px; } .detail-header { display: block; } .delete-button { margin-top: 20px; } .metric-grid { grid-template-columns: 1fr 1fr; margin: 24px 0 35px; } .metric:first-child { grid-column: 1 / -1; } .snapshot-columns { grid-template-columns: 1fr; } }
+
+.login-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.login-card { width: 100%; max-width: 400px; background: #fff; border: 1px solid #d3dec9; border-radius: 16px; padding: 48px 36px 40px; box-shadow: 0 8px 30px #1a3a2812; }
+.login-card .brand { color: #13382f; }
+.login-card .brand-accent { color: #3a7a52; }
+.login-heading { text-align: center; font-size: 24px; margin: 0 0 6px; color: #172923; }
+.login-sub { text-align: center; font-size: 14px; color: #506b5a; margin: 0 0 28px; }
+.login-form { display: grid; gap: 10px; }
+.login-form label { font-size: 12px; font-weight: 700; color: #33574b; margin-top: 4px; }
+.login-button { margin-top: 12px; min-height: 44px; font-size: 14px; }
+.login-toggle { text-align: center; font-size: 13px; color: #506b5a; margin: 20px 0 0; }
+.link-button { background: none; border: none; color: #28674c; font-weight: 700; text-decoration: underline; cursor: pointer; font-size: inherit; padding: 0; }
+.link-button:hover { color: #1a4a35; }
+
+.topbar-search { flex: 1; max-width: 380px; margin: 0 20px; position: relative; }
+.topbar-search input { height: 36px; min-height: 36px; border-radius: 20px; font-size: 13px; padding: 0 32px 0 14px; background: #f4f6ee; border: 1px solid #ccd7c7; }
+.topbar-search input:focus { background: #fff; border-color: #28674c; }
+.search-clear-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 14px; color: #708477; cursor: pointer; padding: 0; }
+.search-results-panel { padding: 40px clamp(26px, 5vw, 84px); max-width: 1200px; margin: 0 auto; }
+.search-section { margin-bottom: 32px; }
+.search-section h3 { font-size: 16px; color: #224335; margin: 0 0 12px; display: flex; align-items: center; justify-content: space-between; }
+.search-topic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.search-topic-card { background: #f9fbf6; border: 1px solid #dce5d8; border-radius: 10px; padding: 14px 16px; cursor: pointer; text-align: left; transition: border-color .15s; }
+.search-topic-card:hover { border-color: #7b9e70; background: #fff; }
+.search-topic-card strong { display: block; font-size: 14px; color: #17382d; }
+.search-topic-card small { display: block; font-size: 11px; color: #5a7667; margin-top: 4px; }
+

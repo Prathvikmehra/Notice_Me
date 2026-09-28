@@ -1,17 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { getLatestSnapshot, getTimeline, setAlertEmail } from '../api/client.js';
+import { getLatestSnapshot, getTimeline, updateAlertSettings } from '../api/client.js';
 import TimelineView from '../components/TimelineView.jsx';
 
 export default function TopicDetail({ topic, onDelete, onAlertChange, refreshToken }) {
   const [diffs, setDiffs] = useState([]);
   const [snapshot, setSnapshot] = useState(null);
   const [email, setEmail] = useState(topic.alertEmail || '');
+  const [enabled, setEnabled] = useState(Boolean(topic.alertEnabled));
+  const [frequency, setFrequency] = useState(topic.alertFrequency || '3h');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  useEffect(() => { setEmail(topic.alertEmail || ''); }, [topic.alertEmail]);
+  useEffect(() => {
+    setEmail(topic.alertEmail || '');
+    setEnabled(Boolean(topic.alertEnabled));
+    setFrequency(topic.alertFrequency || '3h');
+  }, [topic.alertEmail, topic.alertEnabled, topic.alertFrequency]);
   useEffect(() => { setMessage(''); }, [topic.id]);
   useEffect(() => {
     let active = true;
@@ -23,15 +29,19 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
     return () => { active = false; };
   }, [topic.id, refreshToken]);
 
-  async function saveEmail(event) {
+  async function saveAlerts(event) {
     event.preventDefault();
     setBusy(true);
     setError('');
     setMessage('');
     try {
-      const updated = await setAlertEmail(topic.id, email.trim() || null);
+      const updated = await updateAlertSettings(topic.id, {
+        email: email.trim() || null,
+        alertEnabled: enabled,
+        alertFrequency: frequency,
+      });
       onAlertChange(updated);
-      setMessage(updated.alertEmail ? 'Email alerts saved.' : 'Email alerts disabled.');
+      setMessage(updated.alertEnabled ? `Alerts enabled (${frequency}).` : 'Alerts disabled.');
     } catch (cause) { setError(cause.message); }
     finally { setBusy(false); }
   }
@@ -53,8 +63,53 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
       {message && <p className="form-success" role="status">{message}</p>}
       <TimelineView diffs={diffs} loading={loading} />
       <section className="settings-card" aria-labelledby="alert-heading">
-        <div><div className="section-label">STAY IN THE LOOP</div><h2 id="alert-heading">Email alerts</h2><p>Get notified when a new change is detected. Mail delivery requires SMTP to be configured.</p></div>
-        <form onSubmit={saveEmail}><label htmlFor="alert-email">Alert email</label><div className="input-action"><input id="alert-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /><button className="button button-primary" disabled={busy} type="submit">{busy ? 'Saving…' : 'Save'}</button></div><small>Leave blank and save to turn alerts off.</small></form>
+        <div>
+          <div className="section-label">NOTIFICATIONS</div>
+          <h2 id="alert-heading">Change alerts</h2>
+          <p>Control whether and how often you receive email alerts when changes are detected.</p>
+        </div>
+        <form onSubmit={saveAlerts}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '8px' }}>
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              style={{ width: 'auto', minHeight: 'auto' }}
+            />
+            <span>Enable alerts for this topic</span>
+          </label>
+
+          <label htmlFor="alert-frequency">Check frequency</label>
+          <select
+            id="alert-frequency"
+            value={frequency}
+            onChange={(e) => setFrequency(e.target.value)}
+            disabled={!enabled}
+            style={{ marginBottom: '8px' }}
+          >
+            <option value="3h">Every 3 hours (Minimum / Standard)</option>
+            <option value="1d">Daily digest (24 hours)</option>
+            <option value="3d">Every 3 days</option>
+            <option value="1h">Hourly checks (Pro tier)</option>
+          </select>
+
+          <label htmlFor="alert-email">Alert email recipient</label>
+          <div className="input-action">
+            <input
+              id="alert-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              disabled={!enabled}
+              required={enabled}
+            />
+            <button className="button button-primary" disabled={busy} type="submit">
+              {busy ? 'Saving…' : 'Save settings'}
+            </button>
+          </div>
+          <small>{enabled ? 'Email required when alerts are enabled.' : 'Alerts currently disabled.'}</small>
+        </form>
       </section>
       {results && <details className="snapshot-details"><summary>View latest sources</summary><div className="snapshot-columns"><div><h3>Search</h3>{results.search.map((item) => <SourceLink key={item.link} item={item} />)}</div><div><h3>News</h3>{results.news.map((item) => <SourceLink key={item.link} item={item} />)}</div></div></details>}
     </div>

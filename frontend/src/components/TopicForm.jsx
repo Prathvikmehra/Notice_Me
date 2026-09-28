@@ -32,8 +32,11 @@ export default function TopicForm({ onCreate }) {
       <label htmlFor="topic-category">Category</label>
       <select id="topic-category" value={category} onChange={(event) => setCategory(event.target.value)}>
         <option value="scheme">Government scheme</option>
-        <option value="exam">Exam or recruitment</option>
-        <option value="case">Court or policy</option>
+        <option value="exam">Competitive exam</option>
+        <option value="recruitment">Job / Recruitment</option>
+        <option value="case">Court case / Legal</option>
+        <option value="policy">Public policy / Rule</option>
+        <option value="admission">University admission</option>
         <option value="other">Other</option>
       </select>
       {error && <p className="form-error" role="alert">{error}</p>}
