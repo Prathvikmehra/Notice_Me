@@ -154,7 +154,7 @@ node scripts/pull-and-diff.js
 
 Every six hours (`0 */6 * * *`, UTC), GitHub Actions runs the same script as the local command above. Node 20 installs the locked npm workspace dependencies, generates Prisma Client, and runs the automated tests before collection. Existing pnpm lockfiles are retained; the workflow uses the npm lockfile. Update `package-lock.json` whenever workspace dependencies change.
 
-For each database Topic, the collector requests Google Search (`engine=google`) and Google News (`engine=google_news`). It tries configured `SERPAPI_KEY_1` through `SERPAPI_KEY_5` in order, rotating on HTTP 429 or a quota error. Exhausted keys are skipped for the rest of that run. Logs identify only the key index.
+For each Topic owned by an authenticated user, the collector requests Google Search (`engine=google`) and Google News (`engine=google_news`). Older seed rows without a `userId` are hidden from the app and excluded from collection and status reports. The collector tries configured `SERPAPI_KEY_1` through `SERPAPI_KEY_5` in order, rotating on HTTP 429 or a quota error. Exhausted keys are skipped for the rest of that run. Logs identify only the key index.
 
 Both responses must contain usable results before any snapshot is written. The collector keeps at most ten results per channel and stores exactly the contract in [`docs/snapshot-format.md`](docs/snapshot-format.md). Google News groups are flattened into articles and publisher objects become publisher names. Missing snippets become empty strings, because Google News may omit them; empty result arrays and malformed articles fail the run.
 

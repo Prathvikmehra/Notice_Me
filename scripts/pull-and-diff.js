@@ -23,7 +23,8 @@ function isAlertDue(topic) {
 }
 
 export async function runPipeline({ db, client, logger = console }) {
-  const topics = await db.topic.findMany({ orderBy: { id: 'asc' } });
+  // Legacy seed rows have no owner and are invisible to the authenticated app.
+  const topics = await db.topic.findMany({ where: { userId: { not: null } }, orderBy: { id: 'asc' } });
   if (topics.some((topic) => topic.alertEmail) && typeof alertService.sendDiffAlert !== 'function') {
     throw new Error('alertService.js must export sendDiffAlert(topic, diff) before processing topics with alertEmail.');
   }

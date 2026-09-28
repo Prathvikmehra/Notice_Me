@@ -7,6 +7,7 @@ const db = new PrismaClient({ log: [] });
 
 try {
   const topics = await db.topic.findMany({
+    where: { userId: { not: null } },
     orderBy: { name: 'asc' },
     select: {
       id: true,

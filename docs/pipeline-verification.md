@@ -13,7 +13,7 @@
 
 - Express API now implements topic creation/listing/deletion, the dated Diff timeline, latest-snapshot lookup, and alert email settings. Requests were exercised with an in-memory database; malformed input and missing topics returned the expected errors.
 - The Nodemailer service was exercised with an in-memory transport. It formats a source-linked email, rejects missing settings or a refused recipient, and never marks a Diff alerted until its recipient is accepted. A later live Actions run also verified SMTP acceptance; the recipient reports that neither message reached inbox or spam, so delivery remains unresolved.
-- The React dashboard was opened against the live read-only API. All three real topics and their latest source counts appeared. Browser checks found no console errors, failed network requests, or horizontal overflow at 1440, 768, and 375 pixels.
+- Before authentication was added, the React dashboard was opened against the live read-only API. The three then-visible seed topics and their latest source counts appeared. Browser checks found no console errors, failed network requests, or horizontal overflow at 1440, 768, and 375 pixels. This browser pass does not verify the later authenticated experience.
 - A separate browser run used intercepted in-memory API responses to exercise add topic, display a Diff and citation, save an alert email, and delete a topic. It did not mutate Supabase.
 - The automated axe-core WCAG 2.2 AA scan found no violations on the inspected detail view. This does not replace a manual screen-reader pass. No committed screenshot baseline exists, so visual regression comparison is inconclusive; desktop and mobile screenshots were inspected manually.
 
@@ -23,7 +23,7 @@
 
 The direct hostname resolved to IPv6 only. The GitHub `DATABASE_URL` secret was subsequently switched to the user-provided Session pooler, with SSL required and one Prisma connection. This resolved connectivity without schema changes or edits to the seed script, diff engine, alert service, or frontend.
 
-## Successful live collection
+## Legacy pre-auth live collection
 
 - [First successful run](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36402371029): seeded/preserved the three initial topics and stored their first snapshots. All 23 tests passed in Actions. The run made six successful SerpApi requests using key index 1; key index 2 was configured but not needed.
 - [Second successful run](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36402485421): stored a second snapshot per topic and exercised comparison with the real diff engine. The returned results were unchanged, so no Diff rows were inserted.
@@ -39,17 +39,17 @@ The direct hostname resolved to IPv6 only. The GitHub `DATABASE_URL` secret was 
 
 These early manual runs validate ingestion and unchanged-result handling. Closely spaced requests may reuse SerpApi's cache, so the source links and summaries still need human review before the demo.
 
-## Current live evidence
+## Legacy collection evidence and current app status
 
-- [Run 36441985047](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36441985047) passed on `main` with all 29 tests, frontend build, and collection for four tracked topics. Its artifact recorded six Diffs across the three original topics, two each, from live Search and News pulls. A fourth, newer topic had its first snapshot.
-- [SMTP test run 36444223926](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36444223926) passed with a temporary recipient on one original topic. It retried that topic's two genuine pending Diffs, and the database confirmed both were marked `alerted=true` only after the SMTP server accepted them. The topic's previous disabled alert settings were restored after the test; the other topics' settings were untouched. The recipient later reported no message in inbox or spam; SMTP acceptance alone did not prove delivery.
+- [Run 36441985047](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36441985047) passed on `main` with all 29 tests, frontend build, and collection for four database rows. Its six Diffs belonged to the three old seed topics, which have no `userId`. Rishab's authenticated dashboard does not show them, so they do **not** establish the current app's three-Diff goal.
+- [SMTP test run 36444223926](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36444223926) used one of those legacy topics. Brevo accepted two pending Diff emails and the database marked them `alerted=true`, but the recipient reported no message in inbox or spam. The topic's prior disabled settings were restored. This test does not demonstrate delivery for a user-owned topic.
 - [Direct SMTP diagnostic](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36445263780) confirmed Brevo accepted another message with `250 queued` and message ID `<59e7230c-d1cd-d415-5e7a-73e504342c3d@smtp-brevo.com>`. [Sender configuration check](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36445498699) showed `ALERT_FROM` was set to the Brevo technical SMTP login. [Brevo says this login cannot be a From address](https://help.brevo.com/hc/en-us/articles/115000188150-Troubleshooting-Issues-with-Brevo-SMTP); use a verified sender instead. The pipeline and diagnostic now reject that known-bad configuration before another alert is marked sent. Check Brevo's transactional event for the queued message to establish the actual delivery outcome.
-- The second run's artifact recorded eight or nine snapshots and two Diffs for each original topic; the newly added fourth topic had two snapshots and no Diff. The history target for **every current topic** will be met after its next successful pull, provided the topic remains tracked. No fabricated snapshots or Diffs were written.
+- A read-only check on 2026-09-28 at 15:50 UTC found three unowned legacy topics and one owner-linked topic. The owner-linked topic had **two snapshots and zero Diffs**. The collector and status report now select only owner-linked topics; the old rows remain in the database but no longer consume scheduled SerpApi requests or inflate current-app evidence. No fabricated snapshots or Diffs were written.
 
 ## Still requires live evidence
 
 - An actual run triggered by the six-hour schedule, not just manual dispatch.
-- Human review of the six live Diff summaries and source URLs for the demo; an artifact count alone does not prove a material change.
-- The newly added topic's third snapshot, replacement of `ALERT_FROM` with a verified sender, Brevo delivery-log confirmation and an inbox-verified retry, and the recorded demo/submission.
+- At least three snapshots per current user-owned topic and three genuine Diffs visible in the authenticated app; the legacy six Diffs do not count. Review their source URLs before the demo.
+- Replacement of `ALERT_FROM` with a verified sender, Brevo delivery-log confirmation and an inbox-verified alert from a user-owned topic, and the recorded demo/submission.
 
 Use `npm run pipeline:status` or the Actions summary to check history counts. Read the latest summaries and source URLs in the downloaded JSON artifact for the demo. Never create synthetic database changes to reach the history target.
