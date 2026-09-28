@@ -77,6 +77,7 @@ export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.
     .filter(({ key }) => key);
   if (!keys.length) throw new Error('Configure at least one of SERPAPI_KEY_1..4.');
   let keyOffset = 0;
+  const usage = keys.map(({ index }) => ({ keyIndex: index, attempts: 0, successfulResponses: 0 }));
 
   async function request(engine, query) {
     text(query, 'query');
@@ -85,6 +86,8 @@ export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.
       const url = new URL('https://serpapi.com/search.json');
       url.search = new URLSearchParams({ engine, q: query, api_key: key, hl: 'en', gl: 'in' });
       logger.info(`SerpApi ${engine}: using key index ${index}.`);
+      const counter = usage[keyOffset];
+      counter.attempts += 1;
       let response;
       try {
         response = await fetchImpl(url, { signal: AbortSignal.timeout(30_000), redirect: 'error' });
@@ -113,6 +116,7 @@ export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.
           (payload.search_metadata?.status && payload.search_metadata.status !== 'Success')) {
         throw new Error(`SerpApi ${engine} failed using key index ${index} (HTTP ${response.status}); no snapshot saved.`);
       }
+      counter.successfulResponses += 1;
       return payload;
     }
     throw new Error('All configured SerpApi keys are rate limited or out of quota (SERPAPI_KEY_1..4).');
@@ -133,5 +137,5 @@ export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.
     return { query, pulledAt: new Date().toISOString(), search, news };
   }
 
-  return { googleSearch, googleNews, pullSnapshot };
+  return { googleSearch, googleNews, pullSnapshot, getUsage: () => usage.map((counter) => ({ ...counter })) };
 }

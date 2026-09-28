@@ -69,6 +69,7 @@ export async function main() {
   try {
     await runPipeline({ db, client });
   } finally {
+    console.info(`SerpApi usage this run (not billed quota): ${JSON.stringify(client.getUsage())}`);
     await db.$disconnect();
   }
 }

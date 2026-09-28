@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 */6 * * *'
   workflow_dispatch:
+    inputs:
+      seed_topics:
+        description: 'Add missing initial topics using the existing seed script'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -24,11 +29,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
       - name: Install dependencies
-        # Requires a committed npm package-lock.json at the repository root.
         run: npm ci
       - name: Generate Prisma client
+        id: prisma
         run: npm run prisma:generate
+      - name: Test pipeline and diff contracts
+        run: npm test
+      - name: Seed initial topics when requested
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_topics }}
+        run: npm run seed
       - name: Run pull and diff
         run: node scripts/pull-and-diff.js
         env:
@@ -41,3 +52,16 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           ALERT_FROM: ${{ secrets.ALERT_FROM }}
+      - name: Report stored snapshots and diffs
+        if: ${{ !cancelled() && steps.prisma.outcome == 'success' }}
+        run: npm run pipeline:status
+        env:
+          PIPELINE_REPORT_PATH: pipeline-status.json
+      - name: Save collection evidence
+        if: ${{ !cancelled() && steps.prisma.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-status-${{ github.run_id }}
+          path: pipeline-status.json
+          if-no-files-found: warn
+          retention-days: 14
