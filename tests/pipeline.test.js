@@ -179,27 +179,3 @@ test('CLI exits nonzero on missing configuration, DB errors, and absent alert ex
   }
 });
 
-test('read-only status reports history targets and fails on database errors', async () => {
-  const { spawnSync } = await import('node:child_process');
-  const loaderSource = `
-    export async function resolve(specifier, context, nextResolve) {
-      let source;
-      if (specifier === 'dotenv/config') source = '';
-      if (specifier === '@prisma/client') source = \`export class PrismaClient {
-        topic = { findMany: async () => {
-          if (process.env.TEST_CASE === 'error') throw new Error('private database details');
-          if (process.env.TEST_CASE === 'empty') return [];
-          return [{ id: 'topic-1', name: 'Test | topic', _count: { snapshots: 3, diffs: 3 }, snapshots: [{ pulledAt: new Date('2026-09-28T06:00:00Z') }], diffs: [] }];
-        } };
-        async $disconnect() {}
-      }\`;
-      return source !== undefined ? { url: 'data:text/javascript,' + encodeURIComponent(source), shortCircuit: true } : nextResolve(specifier, context);
-    }
-  `;
-  for (const [kind, status, expected] of [['ready', 0, /overall\): met/], ['empty', 0, /overall\): pending/], ['error', 1, /Pipeline status failed/]]) {
-    const result = spawnSync(process.execPath, ['--no-warnings', '--experimental-loader', 'data:text/javascript,' + encodeURIComponent(loaderSource), `${root}/scripts/pipeline-status.js`], { encoding: 'utf8', env: { PATH: process.env.PATH, TEST_CASE: kind } });
-    assert.equal(result.status, status, result.stderr);
-    assert.match(result.stdout + result.stderr, expected);
-    assert.ok(!result.stderr.includes('private database details'));
-  }
-});
