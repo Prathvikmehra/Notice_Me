@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '0 */6 * * *'
   workflow_dispatch:
+    inputs:
+      smtp_diagnostic:
+        description: Check SMTP configuration without collecting data or sending email
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -15,6 +21,7 @@ concurrency:
 
 jobs:
   pull-and-diff:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.smtp_diagnostic }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -61,3 +68,60 @@ jobs:
           path: pipeline-status.json
           if-no-files-found: warn
           retention-days: 14
+
+  smtp-diagnostic:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.smtp_diagnostic }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Check SMTP transport
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          ALERT_FROM: ${{ secrets.ALERT_FROM }}
+        run: |
+          node --input-type=module <<'NODE'
+          import nodemailer from 'nodemailer';
+
+          const required = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'ALERT_FROM'];
+          if (required.some((name) => !process.env[name]?.trim())) {
+            console.error('SMTP diagnostic failed: one or more required Secrets are empty.');
+            process.exit(1);
+          }
+          const host = process.env.SMTP_HOST.toLowerCase();
+          const port = Number(process.env.SMTP_PORT);
+          if (!Number.isInteger(port) || port < 1 || port > 65535) {
+            console.error('SMTP diagnostic failed: SMTP_PORT is invalid.');
+            process.exit(1);
+          }
+          const provider = host.includes('mailtrap')
+            ? (host.includes('sandbox') ? 'Mailtrap Sandbox (external delivery disabled)' : 'Mailtrap Sending')
+            : host.includes('gmail') ? 'Gmail'
+            : host.includes('ethereal') ? 'Ethereal test mailbox'
+            : 'Other SMTP provider';
+          console.log(`SMTP provider mode: ${provider}.`);
+          const transport = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port,
+            secure: port === 465,
+            requireTLS: port !== 465,
+            auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+          });
+          try {
+            await transport.verify();
+            console.log('SMTP connection and authentication succeeded.');
+          } catch {
+            console.error('SMTP connection or authentication failed; check the provider settings.');
+            process.exitCode = 1;
+          } finally {
+            transport.close();
+          }
+          NODE

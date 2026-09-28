@@ -93,7 +93,7 @@ cp backend/.env.example backend/.env
 
 Populate the following variables:
 - `DATABASE_URL`: Your Supabase PostgreSQL connection string (pooled or direct).
-- `SERPAPI_KEY_1` to `SERPAPI_KEY_4`: SerpApi key pool for automatic key rotation.
+- `SERPAPI_KEY_1` to `SERPAPI_KEY_5`: SerpApi key pool for automatic key rotation.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `ALERT_FROM`: SMTP credentials for email alerts.
 
 ### 4. Database Setup & Migrations
@@ -142,7 +142,7 @@ The dashboard lets you add or remove topics, inspect the newest Search and News 
 | `GET /api/topics/:id/snapshots/latest` | — | `{ "snapshot": {...} }`, or `null` before the first pull |
 | `POST /api/topics/:id/alert-settings` | `{ "email": "you@example.com" }` or `{ "email": null }` | `{ "topic": {...} }` |
 
-Invalid input returns `400`; missing topics return `404`; unavailable email setup returns `409`. The local app has no user accounts, as specified in the PRD, so keep the backend bound to your local machine during the demo.
+Invalid input returns `400`; missing topics return `404`; unavailable email setup returns `409`. The backend is intended for local use during the demo; keep it bound to your local machine.
 
 ### Run Ingestion & Diff Pipeline Locally
 To manually trigger a data pull and diff run without waiting for the cron job:
@@ -152,9 +152,9 @@ node scripts/pull-and-diff.js
 
 ## How the pipeline works
 
-Every three hours (`0 */3 * * *`, UTC), GitHub Actions runs the same script as the local command above. Node 20 installs the locked npm workspace dependencies, generates Prisma Client, and runs the automated tests before collection. Existing pnpm lockfiles are retained; the workflow uses the npm lockfile. Update `package-lock.json` whenever workspace dependencies change.
+Every six hours (`0 */6 * * *`, UTC), GitHub Actions runs the same script as the local command above. Node 20 installs the locked npm workspace dependencies, generates Prisma Client, and runs the automated tests before collection. Existing pnpm lockfiles are retained; the workflow uses the npm lockfile. Update `package-lock.json` whenever workspace dependencies change.
 
-For each database Topic, the collector requests Google Search (`engine=google`) and Google News (`engine=google_news`). It tries configured `SERPAPI_KEY_1` through `SERPAPI_KEY_4` in order, rotating on HTTP 429 or a quota error. Exhausted keys are skipped for the rest of that run. Logs identify only the key index.
+For each database Topic, the collector requests Google Search (`engine=google`) and Google News (`engine=google_news`). It tries configured `SERPAPI_KEY_1` through `SERPAPI_KEY_5` in order, rotating on HTTP 429 or a quota error. Exhausted keys are skipped for the rest of that run. Logs identify only the key index.
 
 Both responses must contain usable results before any snapshot is written. The collector keeps at most ten results per channel and stores exactly the contract in [`docs/snapshot-format.md`](docs/snapshot-format.md). Google News groups are flattened into articles and publisher objects become publisher names. Missing snippets become empty strings, because Google News may omit them; empty result arrays and malformed articles fail the run.
 
@@ -164,9 +164,9 @@ For a Topic with `alertEmail`, `sendDiffAlert(topic, diff)` sends a source-linke
 
 ### First live run
 
-1. In GitHub repository **Settings → Secrets and variables → Actions**, set `DATABASE_URL` and the available `SERPAPI_KEY_1`–`SERPAPI_KEY_4`. At least one key is required. Email delivery additionally needs `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `ALERT_FROM`.
+1. In GitHub repository **Settings → Secrets and variables → Actions**, set `DATABASE_URL` and the available `SERPAPI_KEY_1`–`SERPAPI_KEY_5`. At least one key is required. Email delivery additionally needs `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `ALERT_FROM`.
 2. Confirm the existing Prisma migrations have been applied to the shared database with its owner. The collection workflow does not change the database schema.
-3. Open **Actions → Scheduled Pull and Diff → Run workflow** on `main`. Enable **seed_topics** only when the initial tracked topics need adding. This invokes the existing seed script, which preserves topics already present.
+3. Open **Actions → Scheduled Pull and Diff → Run workflow** on `main`. Add topics through the dashboard or API before the run; the collection workflow does not seed them.
 4. Open the run summary to see snapshot/diff counts and latest pull timestamps. Download the `pipeline-status-<run-id>` artifact for the latest diff summaries and source URLs. These are database observations, not fabricated fixtures.
 5. Check a subsequent run with event **schedule**, rather than assuming a successful manual run proves the cron fired. Scheduled start times can be delayed by GitHub.
 
@@ -183,6 +183,6 @@ npm run pipeline:status
 
 Tests use mock API/database/SMTP dependencies only inside test files; they require no live credentials. The status command reads the database without changing it. GitHub Actions runs both automatically and retains its JSON evidence artifact for 14 days.
 
-Each full collection normally makes two SerpApi requests per Topic. At four scheduled runs per day, the 30-day estimate is **240 requests per Topic**, or **720 requests for three Topics**, before manual runs and retries. Each run logs request attempts and successful responses by key index. These counters are not SerpApi billed usage; check each account's SerpApi dashboard for remaining quota.
+Each full collection normally makes two SerpApi requests per Topic. At four scheduled runs per day, the 30-day estimate is **240 requests per Topic**, or **720 requests for three Topics / 960 for four Topics**, before manual runs and retries. Each run logs request attempts and successful responses by key index. These counters are not SerpApi billed usage; check each account's SerpApi dashboard for remaining quota.
 
-Check Actions daily. Before the demo, verify at least **three snapshots per tracked Topic and three real Diffs overall** (the PRD's stricter target). Review the actual changes and source URLs: a count alone cannot establish that a change is meaningful. Repeated pulls may legitimately produce no Diffs; never edit stored snapshots or manufacture updates to meet the target. Once the alert service and SMTP secrets are ready, verify a real delivery and confirm that only the delivered Diff is marked alerted.
+Check Actions daily. Before the demo, verify at least **three snapshots per tracked Topic and three real Diffs overall** (the PRD's stricter target). Review the actual changes and source URLs: a count alone cannot establish that a change is meaningful. Repeated pulls may legitimately produce no Diffs; never edit stored snapshots or manufacture updates to meet the target. Confirm an alert reaches the recipient’s inbox and that only SMTP-accepted Diffs are marked alerted.
