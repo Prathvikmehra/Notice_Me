@@ -30,6 +30,12 @@ export async function runPipeline({ db, client, logger = console }) {
   if (topics.some((topic) => topic.alertEmail) && !alertService.isAlertConfigured?.()) {
     throw new Error('Email alerts are enabled but SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, or ALERT_FROM is missing.');
   }
+  const from = process.env?.ALERT_FROM || '';
+  const fromAddress = (from.match(/<([^<>]+)>/)?.[1] || from).trim().toLowerCase();
+  if (topics.some((topic) => topic.alertEmail && topic.alertEnabled !== false) &&
+      fromAddress.endsWith('@smtp-brevo.com')) {
+    throw new Error('ALERT_FROM cannot be the Brevo SMTP login; configure a verified sender address.');
+  }
 
   for (const topic of topics) {
     let stage = 'sending pending diff alerts';

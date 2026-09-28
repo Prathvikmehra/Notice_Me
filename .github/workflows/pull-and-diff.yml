@@ -120,6 +120,10 @@ jobs:
           if (provider === 'Brevo') {
             console.log(`Brevo technical SMTP login used as sender: ${fromAddress.endsWith('@smtp-brevo.com')}.`);
             console.log(`Sender address equals SMTP login: ${fromAddress === process.env.SMTP_USER.toLowerCase()}.`);
+            if (fromAddress.endsWith('@smtp-brevo.com')) {
+              console.error('SMTP diagnostic failed: ALERT_FROM must be a verified sender, not the Brevo SMTP login.');
+              process.exit(1);
+            }
           }
           const transport = nodemailer.createTransport({
             host: process.env.SMTP_HOST,
