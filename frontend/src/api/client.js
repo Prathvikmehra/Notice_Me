@@ -31,9 +31,6 @@ export const createTopic = async (fields) => (await request('/api/topics', { met
 export const deleteTopic = (id) => request(`/api/topics/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const getTimeline = (id) => request(`/api/topics/${encodeURIComponent(id)}/timeline`);
 export const getLatestSnapshot = (id) => request(`/api/topics/${encodeURIComponent(id)}/snapshots/latest`);
-export const setAlertEmail = async (id, email) => (await request(`/api/topics/${encodeURIComponent(id)}/alert-settings`, {
-  method: 'POST', body: JSON.stringify({ email }),
-})).topic;
 export const updateAlertSettings = async (id, settings) => (await request(`/api/topics/${encodeURIComponent(id)}/alert-settings`, {
   method: 'POST', body: JSON.stringify(settings),
 })).topic;

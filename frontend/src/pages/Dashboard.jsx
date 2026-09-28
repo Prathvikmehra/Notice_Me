@@ -26,7 +26,7 @@ export default function Dashboard() {
       setSelectedId((previous) => items.some((item) => item.id === previous) ? previous : items[0]?.id || null);
     }).catch((cause) => { if (active) setError(cause.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [revision]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
