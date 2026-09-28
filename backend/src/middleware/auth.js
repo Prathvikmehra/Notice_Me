@@ -25,9 +25,3 @@ export async function requireAuth(req, res, next) {
     return res.status(401).json({ error: { message: 'Authentication failed.' } });
   }
 }
-
-export function optionalAuth(req, res, next) {
-  const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) return next();
-  return requireAuth(req, res, next);
-}

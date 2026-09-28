@@ -1,12 +1,4 @@
-let prismaInstance = null;
-
-async function getDefaultPrisma() {
-  if (!prismaInstance) {
-    const { PrismaClient } = await import('@prisma/client');
-    prismaInstance = new PrismaClient();
-  }
-  return prismaInstance;
-}
+import { getDb } from './db.js';
 
 /**
  * Retrieves timeline diffs for a topic, sorted newest first.
@@ -20,14 +12,12 @@ export async function getTimeline(topicId, client = null) {
     return [];
   }
 
-  const db = client || (await getDefaultPrisma());
+  const db = client || getDb();
 
   return await db.diff.findMany({
     where: { topicId },
     orderBy: {
-      detectedAt: 'desc'
-    }
+      detectedAt: 'desc',
+    },
   });
 }
-
-export default { getTimeline };
