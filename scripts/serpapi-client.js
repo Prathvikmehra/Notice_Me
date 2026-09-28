@@ -90,7 +90,7 @@ export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.
       counter.attempts += 1;
       let response;
       try {
-        response = await fetchImpl(url, { signal: AbortSignal.timeout(30_000), redirect: 'error' });
+        response = await fetchImpl(url, { signal: AbortSignal.timeout(60_000), redirect: 'error' });
       } catch {
         // Never include raw fetch errors: they can contain the URL and API key.
         throw new Error(`SerpApi ${engine} request failed or timed out using key index ${index}.`);
