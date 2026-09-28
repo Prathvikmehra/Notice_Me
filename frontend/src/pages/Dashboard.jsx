@@ -79,19 +79,22 @@ export default function Dashboard() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span className="brand-symbol" aria-hidden="true">✳</span><span>notice<span className="brand-accent">me</span><small>WHAT CHANGED, MADE CLEAR.</small></span></div>
-        <div className="sidebar-intro"><span className="live-dot" /> Monitoring public updates</div>
+        <div className="brand">
+          <span className="brand-symbol" aria-hidden="true">✳</span>
+          <span>notice<span className="brand-accent">me</span><small>GAZETTE & NOTICE TRACKER</small></span>
+        </div>
+        <div className="sidebar-intro"><span className="live-dot" /> Live SerpApi monitoring</div>
         <TopicList topics={topics} selectedId={selectedId} onSelect={setSelectedId} />
         <TopicForm onCreate={add} />
-        <div className="sidebar-foot">Powered by live Search + News<br />Checked every three hours</div>
+        <div className="sidebar-foot">Live Google Search + News<br />Hourly schedule active</div>
       </aside>
       <main className="main-panel">
         <header className="topbar">
-          <span style={{ flexShrink: 0 }}>MONITORING DASHBOARD</span>
+          <span className="topbar-title">Notice Board</span>
           <div className="topbar-search">
             <input
               type="search"
-              placeholder="Search topics & history..."
+              placeholder="Search topics & diffs..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -106,8 +109,11 @@ export default function Dashboard() {
               </button>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
-            <span style={{ fontSize: '12px', color: '#6c8476' }}>{user?.email}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            <div className="user-profile-badge">
+              <span className="user-avatar">{user?.email?.[0]?.toUpperCase() || 'U'}</span>
+              <span>{user?.email}</span>
+            </div>
             <button type="button" className="button button-quiet" onClick={() => setRevision((value) => value + 1)}>↻ Refresh</button>
             <button type="button" className="button button-quiet" onClick={signOut}>Sign out</button>
           </div>
@@ -174,9 +180,9 @@ export default function Dashboard() {
           />
         ) : (
           <div className="empty-page">
-            <span aria-hidden="true">✳</span>
-            <h1>Your watchlist starts here</h1>
-            <p>Add a topic on the left. Notice Me will collect live sources and show changes over time.</p>
+            <span aria-hidden="true">§</span>
+            <h1>No notice selected</h1>
+            <p>Select a tracked item from your watchlist on the left, or add a new public scheme, exam, or policy to monitor live changes.</p>
           </div>
         )}
       </main>

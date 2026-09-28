@@ -24,11 +24,11 @@ export default function TopicForm({ onCreate }) {
 
   return (
     <form className="topic-form" onSubmit={submit}>
-      <div className="section-label">START WATCHING</div>
+      <div className="section-label">TRACK A NEW TOPIC</div>
       <label htmlFor="topic-name">Topic name</label>
-      <input id="topic-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="e.g. SSC CGL 2026" required />
+      <input id="topic-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="e.g. PM-KISAN Eligibility" required />
       <label htmlFor="topic-query">Search query</label>
-      <input id="topic-query" value={query} onChange={(event) => setQuery(event.target.value)} maxLength={500} placeholder="What should we watch for?" required />
+      <input id="topic-query" value={query} onChange={(event) => setQuery(event.target.value)} maxLength={500} placeholder="What changes should we watch?" required />
       <label htmlFor="topic-category">Category</label>
       <select id="topic-category" value={category} onChange={(event) => setCategory(event.target.value)}>
         <option value="scheme">Government scheme</option>
@@ -40,7 +40,9 @@ export default function TopicForm({ onCreate }) {
         <option value="other">Other</option>
       </select>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="button button-primary" disabled={busy} type="submit">{busy ? 'Adding…' : '+ Add topic'}</button>
+      <button className="button button-primary" disabled={busy} type="submit">
+        {busy ? 'Saving topic…' : 'Track this topic'}
+      </button>
     </form>
   );
 }

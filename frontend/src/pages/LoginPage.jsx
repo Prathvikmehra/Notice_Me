@@ -41,12 +41,16 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="brand" style={{ justifyContent: 'center', marginBottom: '32px' }}>
+        <div className="brand" style={{ justifyContent: 'center', marginBottom: '20px' }}>
           <span className="brand-symbol" aria-hidden="true">✳</span>
           <span>notice<span className="brand-accent">me</span></span>
         </div>
-        <h2 className="login-heading">{isSignUp ? 'Create account' : 'Welcome back'}</h2>
-        <p className="login-sub">{isSignUp ? 'Track what matters to you.' : 'Sign in to your watchlist.'}</p>
+        <h2 className="login-heading">{isSignUp ? 'Create your account' : 'Welcome back'}</h2>
+        <p className="login-sub">
+          {isSignUp
+            ? 'Track public notices and receive verified change alerts.'
+            : 'Sign in to view your tracked public notices and diff history.'}
+        </p>
         {error && <p className="form-error" role="alert">{error}</p>}
         {message && <p className="form-success" role="status">{message}</p>}
         <form onSubmit={submit} className="login-form">

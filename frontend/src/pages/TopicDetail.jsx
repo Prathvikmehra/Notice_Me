@@ -56,13 +56,33 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
   return (
     <div className="detail">
       <div className="detail-header">
-        <div><div className="eyebrow">TRACKED TOPIC / {topic.category || 'GENERAL'}</div><h1>{topic.name}</h1><p className="query">{topic.query}</p></div>
-        <button type="button" className="button button-quiet delete-button" onClick={() => onDelete(topic)}>Remove topic</button>
+        <div>
+          <div className="eyebrow">
+            <span className="category-badge">{topic.category || 'General Notice'}</span>
+            <span>Ref #{topic.id.slice(0, 8)}</span>
+          </div>
+          <h1>{topic.name}</h1>
+          <p className="query">
+            <span className="query-prefix">Search query:</span> “{topic.query}”
+          </p>
+        </div>
+        <button type="button" className="button button-danger delete-button" onClick={() => onDelete(topic)}>
+          Remove notice
+        </button>
       </div>
       <div className="metric-grid">
-        <div className="metric"><span>LAST CHECKED</span><strong>{lastPull && !Number.isNaN(lastPull.getTime()) ? lastPull.toLocaleString() : 'Awaiting first pull'}</strong></div>
-        <div className="metric"><span>SEARCH SOURCES</span><strong>{results?.search?.length ?? '—'}</strong></div>
-        <div className="metric"><span>NEWS SOURCES</span><strong>{results?.news?.length ?? '—'}</strong></div>
+        <div className="metric">
+          <span>LAST CHECKED</span>
+          <strong>{lastPull && !Number.isNaN(lastPull.getTime()) ? lastPull.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Pending first pull'}</strong>
+        </div>
+        <div className="metric">
+          <span>SEARCH SOURCES</span>
+          <strong>{results?.search?.length ?? '—'}</strong>
+        </div>
+        <div className="metric">
+          <span>NEWS SOURCES</span>
+          <strong>{results?.news?.length ?? '—'}</strong>
+        </div>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {message && <p className="form-success" role="status">{message}</p>}
@@ -71,17 +91,18 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
         <div>
           <div className="section-label">NOTIFICATIONS</div>
           <h2 id="alert-heading">Change alerts</h2>
-          <p>Control whether and how often you receive email alerts when changes are detected.</p>
+          <p>Get notified when a new change is verified. Alerts are checked and sent on working days during your preferred window.</p>
         </div>
         <form onSubmit={saveAlerts}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '8px' }}>
+          <label className="toggle-control">
             <input
               type="checkbox"
+              className="toggle-input"
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
-              style={{ width: 'auto', minHeight: 'auto' }}
             />
-            <span>Enable alerts for this topic</span>
+            <span className="toggle-switch" />
+            <span style={{ fontSize: '13px', fontWeight: 600 }}>Enable alerts for this topic</span>
           </label>
 
           <label htmlFor="alert-hour">Delivery time (Working days Mon–Fri only)</label>
