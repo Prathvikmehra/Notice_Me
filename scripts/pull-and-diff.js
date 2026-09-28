@@ -113,7 +113,7 @@ export async function main() {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     let message = error instanceof Error ? error.message : 'Unknown pipeline error.';
-    for (const name of ['DATABASE_URL', 'SERPAPI_KEY_1', 'SERPAPI_KEY_2', 'SERPAPI_KEY_3', 'SERPAPI_KEY_4', 'SMTP_PASS']) {
+    for (const name of ['DATABASE_URL', 'SERPAPI_KEY_1', 'SERPAPI_KEY_2', 'SERPAPI_KEY_3', 'SERPAPI_KEY_4', 'SERPAPI_KEY_5', 'SMTP_PASS']) {
       const secret = process.env[name];
       if (secret) {
         message = message.replaceAll(secret, '[REDACTED]').replaceAll(encodeURIComponent(secret), '[REDACTED]');
