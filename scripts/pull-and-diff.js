@@ -4,6 +4,24 @@ import { createSerpApiClient } from './serpapi-client.js';
 import { diff } from './diff-engine.js';
 import * as alertService from '../backend/src/services/alertService.js';
 
+const FREQUENCIES = {
+  '1h': 60 * 60 * 1000,
+  '3h': 3 * 60 * 60 * 1000,
+  '1d': 24 * 60 * 60 * 1000,
+  '3d': 3 * 24 * 60 * 60 * 1000,
+};
+
+function isAlertDue(topic) {
+  if (!topic?.alertEmail) return false;
+  if (topic.alertEnabled === false) return false;
+  if (topic.lastAlertedAt && topic.alertFrequency) {
+    const minInterval = FREQUENCIES[topic.alertFrequency] || FREQUENCIES['3h'];
+    const elapsed = Date.now() - new Date(topic.lastAlertedAt).getTime();
+    if (elapsed < minInterval) return false;
+  }
+  return true;
+}
+
 export async function runPipeline({ db, client, logger = console }) {
   const topics = await db.topic.findMany({ orderBy: { id: 'asc' } });
   if (topics.some((topic) => topic.alertEmail) && typeof alertService.sendDiffAlert !== 'function') {
@@ -16,7 +34,7 @@ export async function runPipeline({ db, client, logger = console }) {
   for (const topic of topics) {
     let stage = 'sending pending diff alerts';
     try {
-      if (topic.alertEmail) {
+      if (isAlertDue(topic)) {
         const pending = await db.diff.findMany({
           where: { topicId: topic.id, alerted: false },
           orderBy: { detectedAt: 'asc' },
@@ -55,13 +73,16 @@ export async function runPipeline({ db, client, logger = console }) {
         });
       }, { isolationLevel: 'Serializable' });
 
-      if (change && topic.alertEmail) {
+      if (change && isAlertDue(topic)) {
         stage = 'sending the diff alert';
         // Integration contract: sendDiffAlert(topic, diff) rejects on delivery failure.
         const sent = await alertService.sendDiffAlert(topic, change);
         if (sent === false) throw new Error('Alert service reported delivery failure.');
         stage = 'marking the diff alerted';
         await db.diff.update({ where: { id: change.id }, data: { alerted: true } });
+        if (typeof db.topic?.update === 'function') {
+          await db.topic.update({ where: { id: topic.id }, data: { lastAlertedAt: new Date() } });
+        }
       }
       logger.info(`Topic ${topic.id}: snapshot saved${change ? ', diff created' : ', no diff'}.`);
     } catch (error) {

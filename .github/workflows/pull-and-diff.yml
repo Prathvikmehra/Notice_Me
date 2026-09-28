@@ -4,11 +4,6 @@ on:
   schedule:
     - cron: '0 */3 * * *'
   workflow_dispatch:
-    inputs:
-      seed_topics:
-        description: 'Add missing initial topics using the existing seed script'
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -40,9 +35,6 @@ jobs:
         run: npm test
       - name: Build frontend
         run: npm --workspace=frontend run build
-      - name: Seed initial topics when requested
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_topics }}
-        run: npm run seed
       - name: Run pull and diff
         run: node scripts/pull-and-diff.js
         env:
