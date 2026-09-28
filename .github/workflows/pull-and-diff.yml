@@ -1,0 +1,26 @@
+name: Scheduled Pull and Diff
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  pull-and-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run pull and diff
+        run: node scripts/pull-and-diff.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SERPAPI_KEY_1: ${{ secrets.SERPAPI_KEY_1 }}
+          SERPAPI_KEY_2: ${{ secrets.SERPAPI_KEY_2 }}
+          SERPAPI_KEY_3: ${{ secrets.SERPAPI_KEY_3 }}
+          SERPAPI_KEY_4: ${{ secrets.SERPAPI_KEY_4 }}

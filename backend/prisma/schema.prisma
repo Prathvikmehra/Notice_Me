@@ -1,0 +1,37 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Topic {
+  id         String     @id @default(uuid())
+  name       String
+  query      String     // the SerpApi search query for this topic
+  category   String?    // e.g. "scheme", "exam", "case"
+  alertEmail String?    // optional alert recipient email
+  createdAt  DateTime   @default(now())
+  snapshots  Snapshot[]
+  diffs      Diff[]
+}
+
+model Snapshot {
+  id       String   @id @default(uuid())
+  topicId  String
+  topic    Topic    @relation(fields: [topicId], references: [id])
+  rawData  Json     // stored SerpApi response (trimmed to relevant fields)
+  pulledAt DateTime @default(now())
+}
+
+model Diff {
+  id         String   @id @default(uuid())
+  topicId    String
+  topic      Topic    @relation(fields: [topicId], references: [id])
+  summary    String   // human-readable "what changed"
+  sourceUrls String[] // citations backing the change
+  detectedAt DateTime @default(now())
+  alerted    Boolean  @default(false)
+}
