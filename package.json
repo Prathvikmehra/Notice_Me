@@ -11,6 +11,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
+    "start": "node backend/src/index.js",
     "backend": "npm --workspace=backend run dev",
     "frontend": "npm --workspace=frontend run dev",
     "prisma:generate": "prisma generate --schema=backend/prisma/schema.prisma",
