@@ -43,12 +43,13 @@ These early manual runs validate ingestion and unchanged-result handling. Closel
 
 - [Run 36441985047](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36441985047) passed on `main` with all 29 tests, frontend build, and collection for four tracked topics. Its artifact recorded six Diffs across the three original topics, two each, from live Search and News pulls. A fourth, newer topic had its first snapshot.
 - [SMTP test run 36444223926](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36444223926) passed with a temporary recipient on one original topic. It retried that topic's two genuine pending Diffs, and the database confirmed both were marked `alerted=true` only after the SMTP server accepted them. The topic's previous disabled alert settings were restored after the test; the other topics' settings were untouched. The recipient later reported no message in inbox or spam; SMTP acceptance alone did not prove delivery.
+- [Direct SMTP diagnostic](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36445263780) confirmed Brevo accepted another message with `250 queued` and message ID `<59e7230c-d1cd-d415-5e7a-73e504342c3d@smtp-brevo.com>`. [Sender configuration check](https://github.com/Prathvikmehra/Notice_Me/actions/runs/36445498699) showed `ALERT_FROM` was set to the Brevo technical SMTP login. [Brevo says this login cannot be a From address](https://help.brevo.com/hc/en-us/articles/115000188150-Troubleshooting-Issues-with-Brevo-SMTP); use a verified sender instead. The pipeline and diagnostic now reject that known-bad configuration before another alert is marked sent. Check Brevo's transactional event for the queued message to establish the actual delivery outcome.
 - The second run's artifact recorded eight or nine snapshots and two Diffs for each original topic; the newly added fourth topic had two snapshots and no Diff. The history target for **every current topic** will be met after its next successful pull, provided the topic remains tracked. No fabricated snapshots or Diffs were written.
 
 ## Still requires live evidence
 
 - An actual run triggered by the six-hour schedule, not just manual dispatch.
 - Human review of the six live Diff summaries and source URLs for the demo; an artifact count alone does not prove a material change.
-- The newly added topic's third snapshot, diagnosis and repair of the SMTP delivery problem, and the recorded demo/submission.
+- The newly added topic's third snapshot, replacement of `ALERT_FROM` with a verified sender, Brevo delivery-log confirmation and an inbox-verified retry, and the recorded demo/submission.
 
 Use `npm run pipeline:status` or the Actions summary to check history counts. Read the latest summaries and source URLs in the downloaded JSON artifact for the demo. Never create synthetic database changes to reach the history target.

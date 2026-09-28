@@ -162,6 +162,8 @@ The previous snapshot is loaded before the new snapshot is inserted. Snapshot cr
 
 For a Topic with `alertEmail`, `sendDiffAlert(topic, diff)` sends a source-linked text email through Nodemailer. The Diff is marked `alerted=true` only after SMTP accepts its recipient. Missing SMTP settings fail before collection starts for any email-enabled Topic. Delivery failure leaves the Diff unalerted and fails the run; the next run retries pending alerts before pulling new data. Enabling alerts through the API is unavailable until SMTP settings are present.
 
+If using Brevo, set `ALERT_FROM` to a verified sender address or an address on an authenticated domain. Brevo's `SMTP_USER` is a technical login and cannot be used as the From address; the collector now fails before processing an alert-enabled Topic if it detects that configuration. See [Brevo's SMTP troubleshooting guide](https://help.brevo.com/hc/en-us/articles/115000188150-Troubleshooting-Issues-with-Brevo-SMTP). A successful SMTP `250 queued` response is not proof of inbox delivery; inspect Brevo's **Transactional → Logs** for the Delivered, Blocked, Deferred, or Bounce event.
+
 ### First live run
 
 1. In GitHub repository **Settings → Secrets and variables → Actions**, set `DATABASE_URL` and the available `SERPAPI_KEY_1`–`SERPAPI_KEY_5`. At least one key is required. Email delivery additionally needs `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `ALERT_FROM`.
