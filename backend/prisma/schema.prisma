@@ -26,6 +26,9 @@ model Topic {
   alertEmail     String?
   alertEnabled   Boolean    @default(false)
   alertFrequency String     @default("3h")
+  alertHour      Int?
+  alertDays      String     @default("weekdays")
+  timezone       String     @default("Asia/Kolkata")
   lastAlertedAt  DateTime?
   createdAt      DateTime   @default(now())
   snapshots      Snapshot[]

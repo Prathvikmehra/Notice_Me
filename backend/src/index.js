@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import createTopicsRouter from './routes/topics.js';
 import createTimelineRouter from './routes/timeline.js';
 import createUserRouter from './routes/user.js';
+import { startCronScheduler } from './services/cronService.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export function createApp(db, { auth } = {}) {
@@ -26,7 +27,10 @@ const isEntry = process.argv[1] && import.meta.url === pathToFileURL(process.arg
 if (isEntry && process.env.NODE_ENV !== 'test') {
   const port = Number(process.env.PORT || 3000);
   const host = process.env.HOST || '127.0.0.1';
-  app.listen(port, host, () => console.log(`Backend server running at http://${host}:${port}`));
+  app.listen(port, host, () => {
+    console.log(`Backend server running at http://${host}:${port}`);
+    startCronScheduler(null);
+  });
 }
 
 export default app;

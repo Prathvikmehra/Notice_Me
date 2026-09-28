@@ -76,9 +76,21 @@ export function createTopicsRouter(database = getDb) {
     const email = req.body?.email === null ? null : req.body?.email !== undefined ? clean(req.body.email) : undefined;
     const alertEnabled = req.body?.alertEnabled;
     const alertFrequency = req.body?.alertFrequency;
+    const alertHour = req.body?.alertHour;
+    const alertDays = req.body?.alertDays;
     if (email && (email.length > 254 || !EMAIL.test(email))) throw problem(400, 'Provide a valid email address or null to disable alerts.');
     if (email && !isAlertConfigured()) throw problem(409, 'Email alerts are unavailable until SMTP is configured.');
     if (alertFrequency !== undefined && !['1h', '3h', '1d', '3d'].includes(alertFrequency)) throw problem(400, 'alertFrequency must be one of: 1h, 3h, 1d, 3d');
+    if (alertHour !== undefined && alertHour !== null) {
+      const hour = Number(alertHour);
+      const validHours = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0];
+      if (!validHours.includes(hour)) {
+        throw problem(400, 'alertHour must be between 12 PM (12) and 12 AM (0/23).');
+      }
+    }
+    if (alertDays !== undefined && !['weekdays', 'all'].includes(alertDays)) {
+      throw problem(400, 'alertDays must be weekdays or all.');
+    }
     const client = db();
     const existing = await client.topic.findUnique({ where: { id: req.params.id } });
     if (!existing) throw problem(404, 'Topic not found.');
@@ -87,7 +99,9 @@ export function createTopicsRouter(database = getDb) {
     if (email !== undefined) data.alertEmail = email || null;
     if (typeof alertEnabled === 'boolean') data.alertEnabled = alertEnabled;
     if (alertFrequency) data.alertFrequency = alertFrequency;
-    if (Object.keys(data).length === 0) throw problem(400, 'Provide at least one of: email, alertEnabled, alertFrequency.');
+    if (alertHour !== undefined) data.alertHour = alertHour === null ? null : Number(alertHour);
+    if (alertDays) data.alertDays = alertDays;
+    if (Object.keys(data).length === 0) throw problem(400, 'Provide at least one setting to update.');
     const topic = await client.topic.update({ where: { id: req.params.id }, data });
     res.json({ topic });
   }));

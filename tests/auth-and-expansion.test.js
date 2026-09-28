@@ -165,14 +165,32 @@ test('User data isolation and search across topics/diffs', async () => {
     assert.equal(res.status, 201);
     user1TopicId = res.body.topic.id;
 
-    // Configure notification settings
+    // Configure notification settings with working hour (e.g. 2 PM = 14)
     const settingsRes = await call(`/api/topics/${user1TopicId}/alert-settings`, 'POST', {
       alertFrequency: '1d',
       alertEnabled: true,
+      alertHour: 14,
+      alertDays: 'weekdays',
     });
     assert.equal(settingsRes.status, 200);
     assert.equal(settingsRes.body.topic.alertFrequency, '1d');
     assert.equal(settingsRes.body.topic.alertEnabled, true);
+    assert.equal(settingsRes.body.topic.alertHour, 14);
+    assert.equal(settingsRes.body.topic.alertDays, 'weekdays');
+
+    // Rejection of invalid alertHour (outside 12 PM - 12 AM window)
+    const invalidHour = await call(`/api/topics/${user1TopicId}/alert-settings`, 'POST', {
+      alertHour: 4,
+    });
+    assert.equal(invalidHour.status, 400);
+    assert.match(invalidHour.body.error.message, /alertHour must be between 12 PM/);
+
+    // Rejection of invalid alertDays
+    const invalidDays = await call(`/api/topics/${user1TopicId}/alert-settings`, 'POST', {
+      alertDays: 'weekends-only',
+    });
+    assert.equal(invalidDays.status, 400);
+    assert.match(invalidDays.body.error.message, /alertDays must be weekdays or all/);
 
     // Add a diff for search test
     db._state.diffs.push({

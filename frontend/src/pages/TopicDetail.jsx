@@ -8,6 +8,7 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
   const [email, setEmail] = useState(topic.alertEmail || '');
   const [enabled, setEnabled] = useState(Boolean(topic.alertEnabled));
   const [frequency, setFrequency] = useState(topic.alertFrequency || '3h');
+  const [alertHour, setAlertHour] = useState(topic.alertHour ?? 12);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -17,7 +18,8 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
     setEmail(topic.alertEmail || '');
     setEnabled(Boolean(topic.alertEnabled));
     setFrequency(topic.alertFrequency || '3h');
-  }, [topic.alertEmail, topic.alertEnabled, topic.alertFrequency]);
+    setAlertHour(topic.alertHour ?? 12);
+  }, [topic.alertEmail, topic.alertEnabled, topic.alertFrequency, topic.alertHour]);
   useEffect(() => { setMessage(''); }, [topic.id]);
   useEffect(() => {
     let active = true;
@@ -39,9 +41,12 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
         email: email.trim() || null,
         alertEnabled: enabled,
         alertFrequency: frequency,
+        alertHour: enabled ? Number(alertHour) : null,
+        alertDays: 'weekdays',
       });
       onAlertChange(updated);
-      setMessage(updated.alertEnabled ? `Alerts enabled (${frequency}).` : 'Alerts disabled.');
+      const hourLabel = alertHour === 12 ? '12 PM' : alertHour === 0 ? '12 AM' : alertHour > 12 ? `${alertHour - 12} PM` : `${alertHour} AM`;
+      setMessage(updated.alertEnabled ? `Alerts enabled at ${hourLabel} on weekdays.` : 'Alerts disabled.');
     } catch (cause) { setError(cause.message); }
     finally { setBusy(false); }
   }
@@ -79,18 +84,27 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
             <span>Enable alerts for this topic</span>
           </label>
 
-          <label htmlFor="alert-frequency">Check frequency</label>
+          <label htmlFor="alert-hour">Delivery time (Working days Mon–Fri only)</label>
           <select
-            id="alert-frequency"
-            value={frequency}
-            onChange={(e) => setFrequency(e.target.value)}
+            id="alert-hour"
+            value={alertHour}
+            onChange={(e) => setAlertHour(Number(e.target.value))}
             disabled={!enabled}
             style={{ marginBottom: '8px' }}
           >
-            <option value="3h">Every 3 hours (Minimum / Standard)</option>
-            <option value="1d">Daily digest (24 hours)</option>
-            <option value="3d">Every 3 days</option>
-            <option value="1h">Hourly checks (Pro tier)</option>
+            <option value={12}>12:00 PM (Noon)</option>
+            <option value={13}>1:00 PM</option>
+            <option value={14}>2:00 PM</option>
+            <option value={15}>3:00 PM</option>
+            <option value={16}>4:00 PM</option>
+            <option value={17}>5:00 PM</option>
+            <option value={18}>6:00 PM</option>
+            <option value={19}>7:00 PM</option>
+            <option value={20}>8:00 PM</option>
+            <option value={21}>9:00 PM</option>
+            <option value={22}>10:00 PM</option>
+            <option value={23}>11:00 PM</option>
+            <option value={0}>12:00 AM (Midnight)</option>
           </select>
 
           <label htmlFor="alert-email">Alert email recipient</label>
