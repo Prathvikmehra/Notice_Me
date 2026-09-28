@@ -6,7 +6,7 @@
 - Tests cover empty/invalid responses, quota rotation, key-safe logs, first snapshots, real diff-engine integration, rollback on comparison failure, failed alerts, non-zero CLI exits, and read-only history reporting.
 - `.env` and `backend/.env` are ignored by Git.
 - GitHub has `DATABASE_URL`, `SERPAPI_KEY_1`, and `SERPAPI_KEY_2` configured. Secret values are not included here.
-- The six-hour schedule and manual dispatch are committed on `main`; concurrent collection runs are serialized.
+- The three-hour schedule and manual dispatch are committed on `main`; concurrent collection runs are serialized.
 - The workflow generates a database-count summary and JSON evidence artifact when the database is reachable.
 
 ## Local product verification
@@ -41,7 +41,7 @@ These manual runs validate ingestion and unchanged-result handling. Closely spac
 
 ## Still requires live evidence
 
-- An actual run triggered by the six-hour schedule, not just manual dispatch.
+- An actual run triggered by the three-hour schedule, not just manual dispatch.
 - Three real, reviewed Diffs overall; the three-snapshots-per-Topic target is already met. Four genuine snapshots per Topic are stored as of the full product run.
 - Optional remaining SerpApi keys 3/4 from the team.
 - SMTP secrets and a real delivery test. `sendDiffAlert(topic, diff)` is implemented and covered by mock transport tests.

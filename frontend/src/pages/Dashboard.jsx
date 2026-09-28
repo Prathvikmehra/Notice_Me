@@ -60,7 +60,7 @@ export default function Dashboard() {
         <div className="sidebar-intro"><span className="live-dot" /> Monitoring public updates</div>
         <TopicList topics={topics} selectedId={selectedId} onSelect={setSelectedId} />
         <TopicForm onCreate={add} />
-        <div className="sidebar-foot">Powered by live Search + News<br />Checked every six hours</div>
+        <div className="sidebar-foot">Powered by live Search + News<br />Checked every three hours</div>
       </aside>
       <main className="main-panel">
         <header className="topbar"><span>MONITORING DASHBOARD</span><button type="button" className="button button-quiet" onClick={() => setRevision((value) => value + 1)}>↻ Refresh</button></header>

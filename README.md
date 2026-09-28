@@ -152,7 +152,7 @@ node scripts/pull-and-diff.js
 
 ## How the pipeline works
 
-Every six hours (`0 */6 * * *`, UTC), GitHub Actions runs the same script as the local command above. Node 20 installs the locked npm workspace dependencies, generates Prisma Client, and runs the automated tests before collection. Existing pnpm lockfiles are retained; the workflow uses the npm lockfile. Update `package-lock.json` whenever workspace dependencies change.
+Every three hours (`0 */3 * * *`, UTC), GitHub Actions runs the same script as the local command above. Node 20 installs the locked npm workspace dependencies, generates Prisma Client, and runs the automated tests before collection. Existing pnpm lockfiles are retained; the workflow uses the npm lockfile. Update `package-lock.json` whenever workspace dependencies change.
 
 For each database Topic, the collector requests Google Search (`engine=google`) and Google News (`engine=google_news`). It tries configured `SERPAPI_KEY_1` through `SERPAPI_KEY_4` in order, rotating on HTTP 429 or a quota error. Exhausted keys are skipped for the rest of that run. Logs identify only the key index.
 
