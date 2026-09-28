@@ -1,0 +1,25 @@
+{
+  "name": "notice-me",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "backend": "npm --workspace=backend run dev",
+    "frontend": "npm --workspace=frontend run dev",
+    "prisma:generate": "prisma generate --schema=backend/prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema=backend/prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "dotenv": "^16.4.5",
+    "nodemailer": "^6.9.15",
+    "prisma": "^5.22.0"
+  }
+}
