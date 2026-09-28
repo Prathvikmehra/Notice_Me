@@ -16,14 +16,14 @@ async function runner(alert, compare) {
   const module = new vm.SourceTextModule(await readFile(`${root}/scripts/pull-and-diff.js`, 'utf8'), { context, identifier: pathToFileURL(`${root}/scripts/pull-and-diff.js`).href });
   await module.link(async (specifier) => {
     if (specifier === './diff-engine.js' && !compare) return new vm.SourceTextModule(await readFile(`${root}/scripts/diff-engine.js`, 'utf8'), { context });
-    const exports = specifier === 'node:url' ? { pathToFileURL } : specifier.includes('serpapi-client') ? { createSerpApiClient } : specifier.includes('diff-engine') ? { diff: compare } : alert ? { sendDiffAlert: alert } : {};
+    const exports = specifier === 'node:url' ? { pathToFileURL } : specifier.includes('serpapi-client') ? { createSerpApiClient } : specifier.includes('diff-engine') ? { diff: compare } : alert ? { sendDiffAlert: alert, isAlertConfigured: () => true } : {};
     return new vm.SyntheticModule(Object.keys(exports), function () { for (const [key, value] of Object.entries(exports)) this.setExport(key, value); }, { context });
   });
   await module.evaluate();
   return module.namespace.runPipeline;
 }
 function database(previous = null, email = null) {
-  const state = { snapshots: [], diffs: [], updates: [], queries: [], rollback: false };
+  const state = { snapshots: [], diffs: [], updates: [], queries: [], pending: [], rollback: false };
   const tx = {
     snapshot: {
       async findFirst(args) { state.queries.push(args); return previous; },
@@ -33,7 +33,7 @@ function database(previous = null, email = null) {
   };
   return { state, topic: { async findMany() { return [{ id: 'topic-1', query: 'topic', alertEmail: email }]; } },
     async $transaction(fn) { try { return await fn(tx); } catch (error) { state.snapshots = []; state.diffs = []; state.rollback = true; throw error; } },
-    diff: { async update(args) { state.updates.push(args); } },
+    diff: { async findMany() { return state.pending; }, async update(args) { state.updates.push(args); } },
   };
 }
 const client = { async pullSnapshot() { return structuredClone(raw); } };
@@ -118,6 +118,15 @@ test('delivery throws or returns false: Diff persists unalerted and runner rejec
     assert.equal(db.state.updates.length, 0);
   }
 });
+test('a later run retries stored unalerted diffs before pulling fresh data', async () => {
+  const db = database(null, 'test@example.org');
+  db.state.pending = [{ id: 'previous-diff', summary: 'Earlier real change', sourceUrls: ['https://example.org'] }];
+  const order = [];
+  await (await runner(async () => { order.push('sent'); }))({ db, client: { async pullSnapshot() { order.push('pulled'); return raw; } }, logger: silent });
+  assert.deepEqual(order, ['sent', 'pulled']);
+  assert.equal(db.state.updates[0].where.id, 'previous-diff');
+  assert.equal(db.state.updates[0].data.alerted, true);
+});
 test('missing alert implementation fails before any snapshot writes', async () => {
   const db = database(null, 'test@example.org');
   await assert.rejects((await runner())({ db, client, logger: silent }), /must export sendDiffAlert/);
@@ -159,7 +168,7 @@ test('CLI exits nonzero on missing configuration, DB errors, and absent alert ex
     }
   `;
   const loader = 'data:text/javascript,' + encodeURIComponent(loaderSource);
-  for (const [kind, status, expected] of [['missing', 1, /DATABASE_URL is required/], ['db', 1, /\[REDACTED\] database failure/], ['alert', 1, /must export sendDiffAlert/], ['ok', 0, /Pipeline completed: 0/]]) {
+  for (const [kind, status, expected] of [['missing', 1, /DATABASE_URL is required/], ['db', 1, /\[REDACTED\] database failure/], ['alert', 1, /SMTP_HOST/], ['ok', 0, /Pipeline completed: 0/]]) {
     const result = spawnSync(process.execPath, ['--no-warnings', '--experimental-loader', loader, `${root}/scripts/pull-and-diff.js`], {
       encoding: 'utf8', env: { PATH: process.env.PATH, TEST_CASE: kind, ...(kind === 'missing' ? {} : { DATABASE_URL: 'postgresql://fake', SERPAPI_KEY_1: 'fake-key' }) },
     });

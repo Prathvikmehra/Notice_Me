@@ -37,6 +37,8 @@ jobs:
         run: npm run prisma:generate
       - name: Test pipeline and diff contracts
         run: npm test
+      - name: Build frontend
+        run: npm --workspace=frontend run build
       - name: Seed initial topics when requested
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_topics }}
         run: npm run seed

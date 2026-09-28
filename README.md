@@ -126,6 +126,24 @@ npm run frontend
 ```
 *Or navigate to `frontend/` and run `npm run dev` (starts on `http://localhost:5173`).*
 
+Open `http://localhost:5173` to manage topics. The frontend reads `VITE_API_URL` (defaults to `http://localhost:3000`); the backend accepts the local frontend origin by default. Set `FRONTEND_ORIGIN` in the backend environment if you use a different local origin.
+
+The dashboard lets you add or remove topics, inspect the newest Search and News sources, read dated changes with citations, and set an alert address. It reads the shared Supabase data through the Express API. A newly added topic will show “Awaiting first pull” until the next scheduled or manual collection. Email addresses can be enabled after SMTP settings are configured.
+
+### API responses
+
+| Method and path | Request | Response |
+| --- | --- | --- |
+| `GET /health` | — | `{ "status": "ok" }` |
+| `GET /api/topics` | — | `{ "topics": [...] }` |
+| `POST /api/topics` | `{ "name": "...", "query": "...", "category": "exam" }` | `201 { "topic": {...} }` |
+| `DELETE /api/topics/:id` | — | `204`, deletes that topic and its saved history |
+| `GET /api/topics/:id/timeline` | — | `{ "topic": {...}, "diffs": [...] }`, newest first |
+| `GET /api/topics/:id/snapshots/latest` | — | `{ "snapshot": {...} }`, or `null` before the first pull |
+| `POST /api/topics/:id/alert-settings` | `{ "email": "you@example.com" }` or `{ "email": null }` | `{ "topic": {...} }` |
+
+Invalid input returns `400`; missing topics return `404`; unavailable email setup returns `409`. The local app has no user accounts, as specified in the PRD, so keep the backend bound to your local machine during the demo.
+
 ### Run Ingestion & Diff Pipeline Locally
 To manually trigger a data pull and diff run without waiting for the cron job:
 ```bash
@@ -142,7 +160,7 @@ Both responses must contain usable results before any snapshot is written. The c
 
 The previous snapshot is loaded before the new snapshot is inserted. Snapshot creation, comparison through the existing `diff(previous, current)` function, and any Diff insertion share a serializable database transaction. A first snapshot creates no Diff. A diff/database error rolls back that transaction, keeping the baseline intact. Topics completed before a later failure remain stored.
 
-For a Topic with `alertEmail`, the integration contract is `sendDiffAlert(topic, diff)`: the service must reject on delivery failure. The Diff is marked `alerted=true` only after delivery resolves successfully; an explicit `false` also counts as failure. Until that export exists in `backend/src/services/alertService.js`, a run with any email-enabled Topic fails before collection. Alert failures leave the stored Diff unalerted and fail the run. Automatic retry of previously unalerted Diffs is not implemented; inspect and coordinate any resend with the alert-service owner.
+For a Topic with `alertEmail`, `sendDiffAlert(topic, diff)` sends a source-linked text email through Nodemailer. The Diff is marked `alerted=true` only after SMTP accepts its recipient. Missing SMTP settings fail before collection starts for any email-enabled Topic. Delivery failure leaves the Diff unalerted and fails the run; the next run retries pending alerts before pulling new data. Enabling alerts through the API is unavailable until SMTP settings are present.
 
 ### First live run
 

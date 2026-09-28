@@ -2,12 +2,20 @@
 
 ## Verified
 
-- Node 20: clean `npm ci`, Prisma Client generation, and all 23 tests pass.
+- Node 20: clean `npm ci`, Prisma Client generation, and all 26 tests pass locally. The first successful Actions run on the earlier commit passed its then-current 23 tests.
 - Tests cover empty/invalid responses, quota rotation, key-safe logs, first snapshots, real diff-engine integration, rollback on comparison failure, failed alerts, non-zero CLI exits, and read-only history reporting.
 - `.env` and `backend/.env` are ignored by Git.
 - GitHub has `DATABASE_URL`, `SERPAPI_KEY_1`, and `SERPAPI_KEY_2` configured. Secret values are not included here.
 - The six-hour schedule and manual dispatch are committed on `main`; concurrent collection runs are serialized.
 - The workflow generates a database-count summary and JSON evidence artifact when the database is reachable.
+
+## Local product verification
+
+- Express API now implements topic creation/listing/deletion, the dated Diff timeline, latest-snapshot lookup, and alert email settings. Requests were exercised with an in-memory database; malformed input and missing topics returned the expected errors.
+- The Nodemailer service was exercised with an in-memory transport. It formats a source-linked email, rejects missing settings or a refused recipient, and never marks a Diff alerted until its recipient is accepted. Real SMTP delivery awaits the team credentials.
+- The React dashboard was opened against the live read-only API. All three real topics and their latest source counts appeared. Browser checks found no console errors, failed network requests, or horizontal overflow at 1440, 768, and 375 pixels.
+- A separate browser run used intercepted in-memory API responses to exercise add topic, display a Diff and citation, save an alert email, and delete a topic. It did not mutate Supabase.
+- The automated axe-core WCAG 2.2 AA scan found no violations on the inspected detail view. This does not replace a manual screen-reader pass. No committed screenshot baseline exists, so visual regression comparison is inconclusive; desktop and mobile screenshots were inspected manually.
 
 ## First live attempt
 
@@ -28,13 +36,13 @@ The direct hostname resolved to IPv6 only. The GitHub `DATABASE_URL` secret was 
 | SSC CGL 2026 Recruitment | 9 | 10 |
 | UPSC CSE 2026 Notification | 9 | 10 |
 
-These manual runs validate ingestion and unchanged-result handling. Closely spaced requests may reuse SerpApi's cache, so they do not establish that real-world information has changed. Alerts remain disabled on these three topics until the email integration is available.
+These manual runs validate ingestion and unchanged-result handling. Closely spaced requests may reuse SerpApi's cache, so they do not establish that real-world information has changed. Alerts remain disabled on these three topics until SMTP credentials are available.
 
 ## Still requires live evidence
 
 - An actual run triggered by the six-hour schedule, not just manual dispatch.
 - Three real, reviewed Diffs overall; the three-snapshots-per-Topic target is already met.
 - Optional remaining SerpApi keys 3/4 from the team.
-- SMTP secrets and the real `sendDiffAlert(topic, diff)` export from the alert-service owner, followed by a successful delivery test.
+- SMTP secrets and a real delivery test. `sendDiffAlert(topic, diff)` is implemented and covered by mock transport tests.
 
 Use `npm run pipeline:status` or the Actions summary to check history counts. Read the latest summaries and source URLs in the downloaded JSON artifact for the demo. Never create synthetic database changes to reach the history target.

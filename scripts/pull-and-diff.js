@@ -9,10 +9,25 @@ export async function runPipeline({ db, client, logger = console }) {
   if (topics.some((topic) => topic.alertEmail) && typeof alertService.sendDiffAlert !== 'function') {
     throw new Error('alertService.js must export sendDiffAlert(topic, diff) before processing topics with alertEmail.');
   }
+  if (topics.some((topic) => topic.alertEmail) && !alertService.isAlertConfigured?.()) {
+    throw new Error('Email alerts are enabled but SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, or ALERT_FROM is missing.');
+  }
 
   for (const topic of topics) {
-    let stage = 'pulling Search and News';
+    let stage = 'sending pending diff alerts';
     try {
+      if (topic.alertEmail) {
+        const pending = await db.diff.findMany({
+          where: { topicId: topic.id, alerted: false },
+          orderBy: { detectedAt: 'asc' },
+        });
+        for (const change of pending) {
+          const sent = await alertService.sendDiffAlert(topic, change);
+          if (sent === false) throw new Error('Alert service reported delivery failure.');
+          await db.diff.update({ where: { id: change.id }, data: { alerted: true } });
+        }
+      }
+      stage = 'pulling Search and News';
       const rawData = await client.pullSnapshot(topic.query);
       if (!rawData?.search?.length || !rawData?.news?.length) {
         throw new Error('Refusing an empty or partial snapshot.');
