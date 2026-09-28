@@ -73,9 +73,9 @@ export function trimNews(response) {
 
 /** Keep exhausted keys out of subsequent requests during this run. */
 export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.fetch, logger = console } = {}) {
-  const keys = Array.from({ length: 4 }, (_, i) => ({ index: i + 1, key: env[`SERPAPI_KEY_${i + 1}`]?.trim() }))
+  const keys = Array.from({ length: 5 }, (_, i) => ({ index: i + 1, key: env[`SERPAPI_KEY_${i + 1}`]?.trim() }))
     .filter(({ key }) => key);
-  if (!keys.length) throw new Error('Configure at least one of SERPAPI_KEY_1..4.');
+  if (!keys.length) throw new Error('Configure at least one of SERPAPI_KEY_1..5.');
   let keyOffset = 0;
   const usage = keys.map(({ index }) => ({ keyIndex: index, attempts: 0, successfulResponses: 0 }));
 
@@ -119,7 +119,7 @@ export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.
       counter.successfulResponses += 1;
       return payload;
     }
-    throw new Error('All configured SerpApi keys are rate limited or out of quota (SERPAPI_KEY_1..4).');
+    throw new Error('All configured SerpApi keys are rate limited or out of quota (SERPAPI_KEY_1..5).');
   }
 
   async function googleSearch(query) {

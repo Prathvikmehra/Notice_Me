@@ -49,6 +49,7 @@ jobs:
           SERPAPI_KEY_2: ${{ secrets.SERPAPI_KEY_2 }}
           SERPAPI_KEY_3: ${{ secrets.SERPAPI_KEY_3 }}
           SERPAPI_KEY_4: ${{ secrets.SERPAPI_KEY_4 }}
+          SERPAPI_KEY_5: ${{ secrets.SERPAPI_KEY_5 }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
