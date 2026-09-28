@@ -6,10 +6,15 @@ on:
   workflow_dispatch:
     inputs:
       smtp_diagnostic:
-        description: Check SMTP configuration without collecting data or sending email
+        description: Check SMTP without collecting data; optionally send a test email
         type: boolean
         required: false
         default: false
+      smtp_diagnostic_to:
+        description: Optional recipient for one direct diagnostic email
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -87,6 +92,7 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           ALERT_FROM: ${{ secrets.ALERT_FROM }}
+          DIAGNOSTIC_TO: ${{ inputs.smtp_diagnostic_to }}
         run: |
           node --input-type=module <<'NODE'
           import nodemailer from 'nodemailer';
@@ -118,8 +124,27 @@ jobs:
           try {
             await transport.verify();
             console.log('SMTP connection and authentication succeeded.');
+            const recipient = process.env.DIAGNOSTIC_TO?.trim();
+            if (recipient) {
+              if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+                throw new Error('Invalid diagnostic recipient.');
+              }
+              const result = await transport.sendMail({
+                from: process.env.ALERT_FROM,
+                to: recipient,
+                subject: `Notice Me SMTP diagnostic ${new Date().toISOString()}`,
+                text: 'Direct SMTP delivery test. No new Diff was generated or marked alerted.',
+              });
+              const accepted = result.accepted?.some((address) => address.toLowerCase() === recipient.toLowerCase());
+              if (!accepted || result.rejected?.length) throw new Error('SMTP did not accept the diagnostic recipient.');
+              const secrets = required.map((name) => process.env[name]).filter(Boolean);
+              const safeResponse = secrets.reduce((value, secret) => value.replaceAll(secret, '[REDACTED]'),
+                String(result.response || '').replace(/[\r\n]/g, ' '));
+              console.log(`SMTP accepted diagnostic recipient; message ID: ${result.messageId || 'none'}.`);
+              console.log(`SMTP response: ${safeResponse || 'none'}.`);
+            }
           } catch {
-            console.error('SMTP connection or authentication failed; check the provider settings.');
+            console.error('SMTP verification or diagnostic send failed; check the provider settings.');
             process.exitCode = 1;
           } finally {
             transport.close();
