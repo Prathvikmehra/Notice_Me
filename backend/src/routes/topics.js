@@ -3,6 +3,7 @@ import { getDb } from '../services/db.js';
 import * as alertService from '../services/alertService.js';
 import { syncTopic } from '../services/topicSyncService.js';
 import { parseFrequencyToDays } from '../services/cronService.js';
+import { getCachedTrending } from '../services/trendingService.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const isAlertConfigured = alertService.isAlertConfigured;
@@ -23,6 +24,10 @@ export function createTopicsRouter(database = getDb) {
   router.get('/', attempt(async (req, res) => {
     const topics = await db().topic.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' } });
     res.json({ topics });
+  }));
+
+  router.get('/trending', attempt(async (req, res) => {
+    res.json({ trending: getCachedTrending() });
   }));
 
   router.get('/search', attempt(async (req, res) => {

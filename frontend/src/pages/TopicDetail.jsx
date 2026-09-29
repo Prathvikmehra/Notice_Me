@@ -271,6 +271,36 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
             </div>
           )}
 
+          {Array.isArray(briefing.deadlines) && briefing.deadlines.length > 0 && (
+            <div className="briefing-deadlines-box">
+              <div className="briefing-box-label">
+                <span className="summary-icon">⏰</span>
+                <span>DETECTED DEADLINES & KEY DATES</span>
+              </div>
+              <div className="deadlines-grid">
+                {briefing.deadlines.map((dl, idx) => (
+                  <div key={idx} className="deadline-item">
+                    <span className={`deadline-urgency urgency-${(dl.urgency || 'medium').toLowerCase()}`}>
+                      {dl.urgency || 'KEY DATE'}
+                    </span>
+                    <strong className="deadline-title">{dl.title}</strong>
+                    <span className="deadline-date">{dl.date}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {briefing.actionRequired && (
+            <div className="briefing-action-box">
+              <div className="briefing-box-label">
+                <span className="summary-icon">⚡</span>
+                <span>RECOMMENDED ACTION FOR YOU</span>
+              </div>
+              <p className="briefing-action-text">{briefing.actionRequired}</p>
+            </div>
+          )}
+
           {briefing.bulletins.length > 0 && (
             <div className="briefing-bulletins">
               <div className="bulletins-header">
@@ -528,7 +558,43 @@ function isSpam(item) {
 function getLiveBriefing(results, topic) {
   if (!results) return null;
 
-  // 1. Direct SerpApi Overview if stored
+  // 1. Gemini AI Briefing if generated
+  if (results.aiBriefing?.coreStatus) {
+    const rawSearch = Array.isArray(results.search) ? results.search : [];
+    const rawNews = Array.isArray(results.news) ? results.news : [];
+    const bulletins = [];
+    for (const n of rawNews.slice(0, 2)) {
+      bulletins.push({
+        type: 'NEWS BULLETIN',
+        title: cleanTitle(n.title),
+        link: n.link,
+        source: n.source || getHostname(n.link),
+        date: n.date ? n.date.split(',')[0] : 'Recent',
+      });
+    }
+    if (rawSearch[0]) {
+      bulletins.push({
+        type: 'PRIMARY SOURCE',
+        title: cleanTitle(rawSearch[0].title),
+        link: rawSearch[0].link,
+        source: getHostname(rawSearch[0].link),
+        date: rawSearch[0].date || null,
+        snippet: cleanSnippet(rawSearch[0].snippet).slice(0, 90),
+      });
+    }
+    const primaryRecord = rawSearch[0] || rawNews[0];
+    return {
+      tag: 'GEMINI AI VERIFIED BRIEFING',
+      coreStatus: results.aiBriefing.coreStatus,
+      primarySource: primaryRecord ? { name: primaryRecord.source || getHostname(primaryRecord.link), link: primaryRecord.link } : null,
+      keyPoints: Array.isArray(results.aiBriefing.keyPoints) ? results.aiBriefing.keyPoints : [],
+      deadlines: Array.isArray(results.aiBriefing.deadlines) ? results.aiBriefing.deadlines : [],
+      actionRequired: results.aiBriefing.actionRequired || null,
+      bulletins: bulletins.slice(0, 3),
+    };
+  }
+
+  // 2. Direct SerpApi Overview if stored
   if (results.overview?.text) {
     const bulletins = [];
     if (Array.isArray(results.news) && results.news.length > 0) {

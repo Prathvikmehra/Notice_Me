@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { createTopic, deleteTopic, listTopics, searchTopics } from '../api/client.js';
+import { createTopic, deleteTopic, listTopics, searchTopics, getTrendingTopics } from '../api/client.js';
 import { findTopicBySlugOrId, getTopicSlug } from '../utils/slug.js';
 import TopicForm from '../components/TopicForm.jsx';
 import TopicList from '../components/TopicList.jsx';
 import DiffCard from '../components/DiffCard.jsx';
 import Logo from '../components/Logo.jsx';
 import TopicDetail from './TopicDetail.jsx';
+import TrendingFeed from '../components/TrendingFeed.jsx';
 
 export default function Dashboard() {
   const { signOut, user } = useAuth();
   const [topics, setTopics] = useState([]);
+  const [trending, setTrending] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [viewMode, setViewMode] = useState('watchlist'); // 'watchlist' | 'trending'
   const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -21,26 +24,41 @@ export default function Dashboard() {
 
   useEffect(() => {
     let active = true;
-    listTopics().then((items) => {
+    Promise.all([listTopics(), getTrendingTopics().catch(() => [])]).then(([items, trends]) => {
       if (!active) return;
       setTopics(items);
+      setTrending(trends || []);
       const param = new URLSearchParams(window.location.search).get('topic');
-      const matched = findTopicBySlugOrId(param, items) || items[0] || null;
-      setSelectedId(matched?.id || null);
+      const viewParam = new URLSearchParams(window.location.search).get('view');
+      if (viewParam === 'trending' || (!param && items.length === 0)) {
+        setViewMode('trending');
+        setSelectedId(null);
+      } else {
+        const matched = findTopicBySlugOrId(param, items) || items[0] || null;
+        setSelectedId(matched?.id || null);
+        if (matched) setViewMode('watchlist');
+        else if (items.length === 0) setViewMode('trending');
+      }
     }).catch((cause) => { if (active) setError(cause.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [revision]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    const current = topics.find((t) => t.id === selectedId);
-    if (current) {
-      url.searchParams.set('topic', getTopicSlug(current, topics));
-    } else {
+    if (viewMode === 'trending') {
+      url.searchParams.set('view', 'trending');
       url.searchParams.delete('topic');
+    } else {
+      url.searchParams.delete('view');
+      const current = topics.find((t) => t.id === selectedId);
+      if (current) {
+        url.searchParams.set('topic', getTopicSlug(current, topics));
+      } else {
+        url.searchParams.delete('topic');
+      }
     }
     window.history.replaceState(null, '', url);
-  }, [selectedId, topics]);
+  }, [selectedId, topics, viewMode]);
 
   useEffect(() => {
     const onPopState = () => {
@@ -73,6 +91,7 @@ export default function Dashboard() {
     const topic = await createTopic(fields);
     setTopics((items) => [topic, ...items]);
     setSelectedId(topic.id);
+    setViewMode('watchlist');
     setError('');
   }
 
@@ -83,6 +102,7 @@ export default function Dashboard() {
       const remaining = topics.filter((item) => item.id !== topic.id);
       setTopics(remaining);
       setSelectedId(remaining[0]?.id || null);
+      if (remaining.length === 0) setViewMode('trending');
       setError('');
     } catch (cause) { setError(cause.message); }
   }
@@ -95,13 +115,49 @@ export default function Dashboard() {
           <Logo />
         </div>
         <div className="sidebar-intro"><span className="live-dot" /> Live SerpApi monitoring</div>
-        <TopicList topics={topics} selectedId={selectedId} onSelect={setSelectedId} />
+        <button
+          type="button"
+          className={`sidebar-trending-btn ${viewMode === 'trending' ? 'is-active' : ''}`}
+          onClick={() => { setViewMode('trending'); setSelectedId(null); }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>🔥</span>
+            <span>Trending Radar</span>
+          </div>
+          <span className="nav-tab-badge">LIVE</span>
+        </button>
+        <TopicList
+          topics={topics}
+          selectedId={viewMode === 'watchlist' ? selectedId : null}
+          onSelect={(id) => { setSelectedId(id); setViewMode('watchlist'); }}
+        />
         <TopicForm onCreate={add} />
         <div className="sidebar-foot">Live Google Search + News<br />Hourly schedule active</div>
       </aside>
       <main className="main-panel">
         <header className="topbar">
-          <span className="topbar-title">Notice Board</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <span className="topbar-title">Notice Board</span>
+            <div className="nav-tab-group">
+              <button
+                type="button"
+                className={`nav-tab-btn ${viewMode === 'watchlist' ? 'is-active' : ''}`}
+                onClick={() => {
+                  setViewMode('watchlist');
+                  if (!selectedId && topics.length > 0) setSelectedId(topics[0].id);
+                }}
+              >
+                📑 My Watchlist ({topics.length})
+              </button>
+              <button
+                type="button"
+                className={`nav-tab-btn ${viewMode === 'trending' ? 'is-active' : ''}`}
+                onClick={() => { setViewMode('trending'); }}
+              >
+                🔥 Trending Radar <span className="nav-tab-badge">HOT</span>
+              </button>
+            </div>
+          </div>
           <div className="topbar-search">
             <input
               type="search"
@@ -181,6 +237,13 @@ export default function Dashboard() {
           </div>
         ) : loading ? (
           <div className="empty-page">Loading watchlist…</div>
+        ) : viewMode === 'trending' ? (
+          <TrendingFeed
+            trending={trending}
+            userTopics={topics}
+            onTrack={add}
+            onSelectExisting={(id) => { setSelectedId(id); setViewMode('watchlist'); }}
+          />
         ) : selected ? (
           <TopicDetail
             key={selected.id}
@@ -190,11 +253,12 @@ export default function Dashboard() {
             refreshToken={revision}
           />
         ) : (
-          <div className="empty-page">
-            <span aria-hidden="true">§</span>
-            <h1>No notice selected</h1>
-            <p>Select a tracked item from your watchlist on the left, or add a new public scheme, exam, or policy to monitor live changes.</p>
-          </div>
+          <TrendingFeed
+            trending={trending}
+            userTopics={topics}
+            onTrack={add}
+            onSelectExisting={(id) => { setSelectedId(id); setViewMode('watchlist'); }}
+          />
         )}
       </main>
     </div>
