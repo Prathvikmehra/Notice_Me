@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { createTopic, deleteTopic, listTopics, searchTopics } from '../api/client.js';
+import { findTopicBySlugOrId, getTopicSlug } from '../utils/slug.js';
 import TopicForm from '../components/TopicForm.jsx';
 import TopicList from '../components/TopicList.jsx';
 import DiffCard from '../components/DiffCard.jsx';
@@ -10,7 +11,7 @@ import TopicDetail from './TopicDetail.jsx';
 export default function Dashboard() {
   const { signOut, user } = useAuth();
   const [topics, setTopics] = useState([]);
-  const [selectedId, setSelectedId] = useState(new URLSearchParams(window.location.search).get('topic'));
+  const [selectedId, setSelectedId] = useState(null);
   const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -23,23 +24,33 @@ export default function Dashboard() {
     listTopics().then((items) => {
       if (!active) return;
       setTopics(items);
-      setSelectedId((previous) => items.some((item) => item.id === previous) ? previous : items[0]?.id || null);
+      const param = new URLSearchParams(window.location.search).get('topic');
+      const matched = findTopicBySlugOrId(param, items) || items[0] || null;
+      setSelectedId(matched?.id || null);
     }).catch((cause) => { if (active) setError(cause.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [revision]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    if (selectedId) url.searchParams.set('topic', selectedId);
-    else url.searchParams.delete('topic');
+    const current = topics.find((t) => t.id === selectedId);
+    if (current) {
+      url.searchParams.set('topic', getTopicSlug(current, topics));
+    } else {
+      url.searchParams.delete('topic');
+    }
     window.history.replaceState(null, '', url);
-  }, [selectedId]);
+  }, [selectedId, topics]);
 
   useEffect(() => {
-    const onPopState = () => setSelectedId(new URLSearchParams(window.location.search).get('topic'));
+    const onPopState = () => {
+      const param = new URLSearchParams(window.location.search).get('topic');
+      const matched = findTopicBySlugOrId(param, topics);
+      if (matched) setSelectedId(matched.id);
+    };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, []);
+  }, [topics]);
 
   useEffect(() => {
     const trimmed = query.trim();

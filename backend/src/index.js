@@ -15,6 +15,7 @@ export function createApp(db, { auth } = {}) {
   app.use(cors({ origin: origins }));
   app.use(express.json({ limit: '32kb' }));
   if (auth) app.use(auth);
+  app.get('/', (req, res) => res.json({ status: 'ok', service: 'Notice Me API' }));
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
   app.use('/api/user', createUserRouter(db));
   app.use('/api/topics', createTopicsRouter(db));

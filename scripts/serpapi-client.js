@@ -71,6 +71,54 @@ export function trimNews(response) {
   }));
 }
 
+export function extractOverview(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  if (payload.ai_overview) {
+    const aio = payload.ai_overview;
+    const text = typeof aio === 'string' ? aio.trim() :
+      Array.isArray(aio.text_blocks) ? aio.text_blocks.map((b) => b.text || b.snippet || '').filter(Boolean).join(' ') :
+      aio.snippet || aio.summary || null;
+    if (text) {
+      return {
+        type: 'ai_overview',
+        label: 'Google AI Overview',
+        text: text.replace(/\s+/g, ' ').trim(),
+        source: 'Google Generative AI (via SerpApi)',
+      };
+    }
+  }
+  if (payload.answer_box) {
+    const box = payload.answer_box;
+    const text = box.snippet || box.answer || (Array.isArray(box.list) ? box.list.join(' • ') : null) || box.title;
+    if (text && typeof text === 'string') {
+      let sourceName = box.source?.name;
+      if (!sourceName && box.link) {
+        try { sourceName = new URL(box.link).hostname.replace(/^www\./, ''); } catch {}
+      }
+      return {
+        type: 'answer_box',
+        label: box.type ? `Google Answer (${box.type.replace(/_/g, ' ')})` : 'Google Quick Answer',
+        title: box.title || null,
+        text: text.replace(/\s+/g, ' ').trim(),
+        source: sourceName || 'Google Search',
+        link: box.link || null,
+      };
+    }
+  }
+  if (payload.knowledge_graph?.description) {
+    const kg = payload.knowledge_graph;
+    return {
+      type: 'knowledge_graph',
+      label: kg.type || 'Knowledge Graph Entity',
+      title: kg.title || null,
+      text: String(kg.description).replace(/\s+/g, ' ').trim(),
+      source: kg.source?.name || 'Knowledge Graph',
+      link: kg.source?.link || null,
+    };
+  }
+  return null;
+}
+
 /** Keep exhausted keys out of subsequent requests during this run. */
 export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.fetch, logger = console } = {}) {
   const keys = Array.from({ length: 5 }, (_, i) => ({ index: i + 1, key: env[`SERPAPI_KEY_${i + 1}`]?.trim() }))
@@ -132,9 +180,13 @@ export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.
 
   async function pullSnapshot(query) {
     // Sequential pulls also let News reuse the working key selected by Search.
-    const search = await googleSearch(query);
+    const searchRaw = await request('google', query);
+    const search = trimSearch(searchRaw);
     const news = await googleNews(query);
-    return { query, pulledAt: new Date().toISOString(), search, news };
+    const snapshot = { query, pulledAt: new Date().toISOString(), search, news };
+    const overview = extractOverview(searchRaw);
+    if (overview) snapshot.overview = overview;
+    return snapshot;
   }
 
   return { googleSearch, googleNews, pullSnapshot, getUsage: () => usage.map((counter) => ({ ...counter })) };

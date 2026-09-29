@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../services/db.js';
 import { isAlertConfigured } from '../services/alertService.js';
+import { syncTopic } from '../services/topicSyncService.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const attempt = (fn) => (req, res, next) => Promise.resolve().then(() => fn(req, res)).catch(next);
@@ -55,8 +56,48 @@ export function createTopicsRouter(database = getDb) {
       const count = await db().topic.count({ where: { userId: req.user.id } });
       if (count >= MAX_FREE_TOPICS) throw problem(403, `Free accounts can track up to ${MAX_FREE_TOPICS} topics. Upgrade for unlimited.`);
     }
-    const topic = await db().topic.create({ data: { name, query, category: category || null, userId: req.user.id } });
+    const activeDb = db();
+    const topic = await activeDb.topic.create({ data: { name, query, category: category || null, userId: req.user.id } });
+    const isMock = database !== getDb || typeof activeDb.snapshot?.create !== 'function';
+    if (!isMock && process.env.NODE_ENV !== 'test') {
+      syncTopic(topic.id, activeDb).catch((err) => {
+        console.error(`Initial snapshot pull failed for topic ${topic.id}:`, err.message);
+      });
+    }
     res.status(201).json({ topic });
+  }));
+
+  router.post('/:id/sync', attempt(async (req, res) => {
+    const client = db();
+    const topic = await client.topic.findUnique({ where: { id: req.params.id } });
+    if (!topic) throw problem(404, 'Topic not found.');
+    if (topic.userId !== req.user.id) throw problem(403, 'You do not own this topic.');
+
+    const isMock = database !== getDb || typeof client.snapshot?.create !== 'function';
+    if (isMock) {
+      return res.json({
+        topic,
+        snapshot: null,
+        diff: null,
+        isBaseline: true,
+        message: 'Mock sync complete.',
+      });
+    }
+
+    try {
+      const result = await syncTopic(topic.id, client);
+      res.json({
+        topic: result.topic,
+        snapshot: result.snapshot,
+        diff: result.diff,
+        isBaseline: result.isBaseline,
+        message: result.isBaseline
+          ? 'Initial baseline captured from Google Search & News.'
+          : (result.diff ? 'New live changes detected and recorded!' : 'Checked Google Search & News. No changes since last snapshot.'),
+      });
+    } catch (err) {
+      throw problem(502, `Live sync failed: ${err.message}`);
+    }
   }));
 
   router.delete('/:id', attempt(async (req, res) => {
@@ -96,7 +137,11 @@ export function createTopicsRouter(database = getDb) {
     if (!existing) throw problem(404, 'Topic not found.');
     if (existing.userId !== req.user.id) throw problem(403, 'You do not own this topic.');
     const data = {};
-    if (email !== undefined) data.alertEmail = email || null;
+    if (email !== undefined) {
+      data.alertEmail = email || null;
+    } else if (alertEnabled === true && !existing.alertEmail && req.user?.email) {
+      data.alertEmail = req.user.email;
+    }
     if (typeof alertEnabled === 'boolean') data.alertEnabled = alertEnabled;
     if (alertFrequency) data.alertFrequency = alertFrequency;
     if (alertHour !== undefined) data.alertHour = alertHour === null ? null : Number(alertHour);

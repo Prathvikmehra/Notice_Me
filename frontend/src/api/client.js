@@ -34,5 +34,6 @@ export const getLatestSnapshot = (id) => request(`/api/topics/${encodeURICompone
 export const updateAlertSettings = async (id, settings) => (await request(`/api/topics/${encodeURIComponent(id)}/alert-settings`, {
   method: 'POST', body: JSON.stringify(settings),
 })).topic;
+export const syncTopic = (id) => request(`/api/topics/${encodeURIComponent(id)}/sync`, { method: 'POST' });
 export const searchTopics = async (q) => request(`/api/topics/search?q=${encodeURIComponent(q)}`);
 export const getProfile = async () => (await request('/api/user/me'));
