@@ -3,6 +3,8 @@ import { getDb } from './db.js';
 import { createSerpApiClient } from '../../../scripts/serpapi-client.js';
 import { diff } from '../../../scripts/diff-engine.js';
 import { syncTopic } from './topicSyncService.js';
+import { getGeminiClient } from './geminiService.js';
+import { refreshTrendingRadar } from './trendingService.js';
 import * as alertService from './alertService.js';
 
 export function getLocalTimeDetails(timeZone = 'Asia/Kolkata', now = new Date()) {
@@ -74,33 +76,15 @@ export function parseFrequencyToDays(freqStr) {
   return null;
 }
 
-/**
- * Checks topics whose scheduled alert is due.
- * Supports:
- * - Dynamic frequencies: daily (1d), every 2-3 days, weekly (7d), bi-weekly (14d), monthly (30d), custom days
- * - Specific weekdays (e.g. 'tue' for Every Tuesday)
- * - Weekdays ('weekdays') or Every day ('all')
- * - Topics that already received an alert today are skipped until at least tomorrow.
- */
-export async function processDueTopics({ db, client, logger = console, now = new Date() }) {
-  const activeDb = typeof db === 'function' ? db() : (db || getDb());
-  if (!activeDb?.topic) {
-    throw new Error('Database client with topic model is required');
-  }
-
+export function filterEligibleTopics(candidates = [], now = new Date(), targetHour = null) {
   const { hour: currentHour, weekday, month, dayOfMonth, isWeekend } = getLocalTimeDetails('Asia/Kolkata', now);
+  const hourToCheck = targetHour !== null && targetHour !== undefined ? targetHour : currentHour;
   const currentWeekday = weekday.toLowerCase();
 
-  // Query topics where alerts are enabled and scheduled for current hour
-  const candidates = await activeDb.topic.findMany({
-    where: {
-      alertEnabled: true,
-      alertEmail: { not: null },
-      alertHour: currentHour,
-    },
-  });
-
-  const topics = candidates.filter((t) => {
+  return candidates.filter((t) => {
+    if (t.alertHour !== undefined && t.alertHour !== null && t.alertHour !== hourToCheck) {
+      return false;
+    }
     const tz = t.timezone || 'Asia/Kolkata';
     const daySetting = String(t.alertDays || 'weekdays').toLowerCase().trim();
     const freq = String(t.alertFrequency || '1d').toLowerCase().trim();
@@ -143,45 +127,128 @@ export async function processDueTopics({ db, client, logger = console, now = new
     }
     return true;
   });
+}
 
+/**
+ * Pre-fetch phase (T - 10 minutes, runs at minute 50: `50 * * * *`):
+ * Looks ahead to the next hour (e.g. at 3:50 PM, targets 4:00 PM topics).
+ * Pulls SerpApi snapshots and generates Gemini summaries ahead of time,
+ * saving them with `alerted: false` so that the 4:00 PM dispatch is instantaneous.
+ */
+export async function prefetchUpcomingTopics({ db, client, gemini, logger = console, now = new Date() } = {}) {
+  const activeDb = typeof db === 'function' ? db() : (db || getDb());
+  if (!activeDb?.topic) {
+    throw new Error('Database client with topic model is required');
+  }
+
+  const { hour: currentHour } = getLocalTimeDetails('Asia/Kolkata', now);
+  const targetHour = (currentHour + 1) % 24;
+
+  const candidates = await activeDb.topic.findMany({
+    where: {
+      alertEnabled: true,
+      alertEmail: { not: null },
+      alertHour: targetHour,
+    },
+  });
+
+  const topics = filterEligibleTopics(candidates, now, targetHour);
+  if (topics.length === 0) return { prefetched: 0, targetHour, total: 0 };
+
+  logger.info(`Cron [Pre-fetch]: Running T-10m data & AI fetch for ${topics.length} topic(s) due at ${targetHour}:00 IST.`);
+  const apiClient = client || createSerpApiClient();
+  let prefetchedCount = 0;
+
+  for (const topic of topics) {
+    try {
+      await syncTopic(topic.id, activeDb, apiClient, gemini, { skipAlert: true });
+      prefetchedCount++;
+    } catch (err) {
+      logger.warn(`Cron [Pre-fetch]: error pre-fetching topic ${topic.id}: ${err.message}`);
+    }
+  }
+
+  logger.info(`Cron [Pre-fetch]: Completed pre-fetch for ${prefetchedCount}/${topics.length} topic(s).`);
+  return { prefetched: prefetchedCount, targetHour, total: topics.length };
+}
+
+/**
+ * Dispatch phase (Runs at minute 0: `0 * * * *`):
+ * Dispatches alerts for topics scheduled for the current hour.
+ * Sends pre-warmed alerts immediately. If pre-fetch didn't run, executes fallback on-demand.
+ */
+export async function dispatchDueAlerts({ db, client, gemini, logger = console, now = new Date() } = {}) {
+  const activeDb = typeof db === 'function' ? db() : (db || getDb());
+  if (!activeDb?.topic) {
+    throw new Error('Database client with topic model is required');
+  }
+
+  const { hour: currentHour } = getLocalTimeDetails('Asia/Kolkata', now);
+
+  const candidates = await activeDb.topic.findMany({
+    where: {
+      alertEnabled: true,
+      alertEmail: { not: null },
+      alertHour: currentHour,
+    },
+  });
+
+  const topics = filterEligibleTopics(candidates, now, currentHour);
   if (topics.length === 0) return { checked: 0, alerted: 0 };
 
-  logger.info(`Cron: running hourly check for ${topics.length} topic(s) scheduled at ${currentHour}:00 IST.`);
+  logger.info(`Cron [Dispatch]: Delivering scheduled alerts for ${topics.length} topic(s) at ${currentHour}:00 IST.`);
+  const apiClient = client || createSerpApiClient();
   let alertedCount = 0;
 
   for (const topic of topics) {
     try {
-      const rawData = await client.pullSnapshot(topic.query);
-      if (!rawData?.search?.length || !rawData?.news?.length) continue;
+      // 1. Look for unalerted diffs (generated by pre-fetch or previous runs)
+      const pendingDiff = await activeDb.diff.findFirst({
+        where: { topicId: topic.id, alerted: false },
+        orderBy: [{ detectedAt: 'desc' }, { id: 'desc' }],
+      });
 
-      const change = await activeDb.$transaction(async (tx) => {
-        const previous = await tx.snapshot.findFirst({
-          where: { topicId: topic.id },
-          orderBy: [{ pulledAt: 'desc' }, { id: 'desc' }],
-        });
-        const current = await tx.snapshot.create({
-          data: { topicId: topic.id, rawData, pulledAt: new Date(rawData.pulledAt) },
-        });
-        if (!previous) return null;
-        const result = await diff(previous, current);
-        if (!result?.summary || !result?.sourceUrls?.length) return null;
-        return tx.diff.create({
-          data: { topicId: topic.id, summary: result.summary, sourceUrls: result.sourceUrls, alerted: false },
-        });
-      }, { isolationLevel: 'Serializable' });
-
-      if (change) {
-        await alertService.sendDiffAlert(topic, change);
-        await activeDb.diff.update({ where: { id: change.id }, data: { alerted: true } });
-        await activeDb.topic.update({ where: { id: topic.id }, data: { lastAlertedAt: new Date() } });
+      if (pendingDiff) {
+        await alertService.sendDiffAlert(topic, pendingDiff);
+        await activeDb.diff.update({ where: { id: pendingDiff.id }, data: { alerted: true } });
+        await activeDb.topic.update({ where: { id: topic.id }, data: { lastAlertedAt: now } });
         alertedCount++;
+        continue;
+      }
+
+      // 2. Check if a snapshot was already pulled within the last 20 minutes (pre-fetch ran, no changes found)
+      const latestSnapshot = await activeDb.snapshot.findFirst({
+        where: { topicId: topic.id },
+        orderBy: [{ pulledAt: 'desc' }, { id: 'desc' }],
+      });
+
+      const snapshotAgeMs = latestSnapshot?.pulledAt ? (now.getTime() - new Date(latestSnapshot.pulledAt).getTime()) : Infinity;
+      if (snapshotAgeMs < 20 * 60 * 1000) {
+        await activeDb.topic.update({ where: { id: topic.id }, data: { lastAlertedAt: now } });
+        continue;
+      }
+
+      // 3. Fallback: Pre-fetch didn't run (server restart or newly scheduled). Run syncTopic on-demand.
+      const syncResult = await syncTopic(topic.id, activeDb, apiClient, gemini, { skipAlert: false });
+      if (syncResult.diff) {
+        alertedCount++;
+      } else {
+        await activeDb.topic.update({ where: { id: topic.id }, data: { lastAlertedAt: now } });
       }
     } catch (err) {
-      logger.error(`Cron: error processing topic ${topic.id}: ${err.message}`);
+      logger.error(`Cron [Dispatch]: error dispatching alerts for topic ${topic.id}: ${err.message}`);
     }
   }
 
+  logger.info(`Cron [Dispatch]: Finished. Sent ${alertedCount} alert(s) for ${topics.length} topic(s).`);
   return { checked: topics.length, alerted: alertedCount };
+}
+
+/**
+ * Backwards-compatible alias for existing tests and direct invocations.
+ */
+export async function processDueTopics(params = {}) {
+  return dispatchDueAlerts(params);
 }
 
 /**
@@ -235,34 +302,73 @@ export async function processInitialTopicAlerts({ db, client, logger = console, 
   return { checked: eligible.length, alerted: alertedCount };
 }
 
-export function startCronScheduler(database = getDb, { client, enabled = true, logger = console } = {}) {
+export function startCronScheduler(database = getDb, { client, gemini, enabled = true, logger = console } = {}) {
   if (!enabled) return null;
   const dbProvider = database || getDb;
   const apiClient = client || createSerpApiClient();
+  const geminiClient = gemini !== undefined ? gemini : getGeminiClient();
 
-  // Hourly schedule: checks scheduled daily alerts
-  const hourlyTask = cron.schedule('0 * * * *', async () => {
+  // 1. Two-phase pre-fetch (T - 10 min): pulls SerpApi + Gemini at minute 50
+  const prefetchTask = cron.schedule('50 * * * *', async () => {
     try {
-      await processDueTopics({ db: typeof dbProvider === 'function' ? dbProvider() : dbProvider, client: apiClient, logger });
+      await prefetchUpcomingTopics({
+        db: typeof dbProvider === 'function' ? dbProvider() : dbProvider,
+        client: apiClient,
+        gemini: geminiClient,
+        logger,
+      });
     } catch (err) {
-      logger.error(`Cron scheduler failure: ${err.message}`);
+      logger.error(`Cron prefetch failure: ${err.message}`);
     }
   });
 
-  // Minute ticker: checks newly created topics that crossed the 10-minute threshold
+  // 2. Scheduled alert delivery: instant dispatch at minute 0
+  const dispatchTask = cron.schedule('0 * * * *', async () => {
+    try {
+      await dispatchDueAlerts({
+        db: typeof dbProvider === 'function' ? dbProvider() : dbProvider,
+        client: apiClient,
+        gemini: geminiClient,
+        logger,
+      });
+    } catch (err) {
+      logger.error(`Cron dispatch failure: ${err.message}`);
+    }
+  });
+
+  // 3. Public trending radar pre-warm: 3 times daily, 15 min before 8 AM, 2 PM, 8 PM (7:45, 13:45, 19:45 IST)
+  const trendingRadarTask = cron.schedule('45 7,13,19 * * *', async () => {
+    try {
+      await refreshTrendingRadar({
+        client: apiClient,
+        gemini: geminiClient,
+        logger,
+      });
+    } catch (err) {
+      logger.error(`Trending radar pre-warm failure: ${err.message}`);
+    }
+  }, { timezone: 'Asia/Kolkata' });
+
+  // 4. Minute ticker: checks newly created topics that crossed the 10-minute threshold
   const initialTicker = cron.schedule('* * * * *', async () => {
     try {
-      await processInitialTopicAlerts({ db: typeof dbProvider === 'function' ? dbProvider() : dbProvider, client: apiClient, logger });
+      await processInitialTopicAlerts({
+        db: typeof dbProvider === 'function' ? dbProvider() : dbProvider,
+        client: apiClient,
+        logger,
+      });
     } catch (err) {
       logger.error(`Initial alert ticker failure: ${err.message}`);
     }
   });
 
-  logger.info('Cron scheduler initialized (hourly alerts: 0 * * * *, 10-min initial checks: * * * * *).');
+  logger.info('Cron scheduler initialized (pre-fetch: 50 * * * *, dispatch: 0 * * * *, trending radar: 45 7,13,19 * * *, 10-min initial checks: * * * * *).');
 
   return {
     stop: () => {
-      hourlyTask.stop();
+      prefetchTask.stop();
+      dispatchTask.stop();
+      trendingRadarTask.stop();
       initialTicker.stop();
     },
   };

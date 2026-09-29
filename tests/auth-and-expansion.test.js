@@ -238,6 +238,14 @@ test('User data isolation and search across topics/diffs', async () => {
     assert.equal(searchRes.status, 200);
     assert.equal(searchRes.body.diffs.length, 1);
     assert.equal(searchRes.body.diffs[0].summary, 'UPSC Prelims date announced');
+
+    // Trending public notices endpoint
+    const trendRes = await call('/api/topics/trending');
+    assert.equal(trendRes.status, 200);
+    assert.ok(Array.isArray(trendRes.body.trending));
+    assert.ok(trendRes.body.trending.length >= 4);
+    assert.equal(trendRes.body.trending[0].name, 'UPSC CSE 2026');
+    assert.ok(trendRes.body.trending[0].followers > 0);
   });
 
   // User 2 cannot see or access User 1's topic
@@ -357,5 +365,193 @@ test('Flexible multi-day intervals and specific weekday schedule logic', async (
   assert.equal(jan30Details.month, 1);
   assert.equal(jan30Details.dayOfMonth, 30);
 });
+
+test('Two-phase pre-fetch (T-10m) and dispatch (T-0m) alert workflow and trending pre-warm', async () => {
+  const { prefetchUpcomingTopics, dispatchDueAlerts, filterEligibleTopics } = await import('../backend/src/services/cronService.js');
+  const { refreshTrendingRadar, getCachedTrending } = await import('../backend/src/services/trendingService.js');
+  const nodemailer = (await import('nodemailer')).default;
+
+  // 1. Verify filterEligibleTopics
+  const candidates = [
+    { id: 't1', alertHour: 16, alertDays: 'weekdays', alertFrequency: '1d', timezone: 'Asia/Kolkata', lastAlertedAt: null },
+    { id: 't2', alertHour: 15, alertDays: 'weekdays', alertFrequency: '1d', timezone: 'Asia/Kolkata', lastAlertedAt: null },
+    { id: 't3', alertHour: 16, alertDays: 'weekdays', alertFrequency: '1d', timezone: 'Asia/Kolkata', lastAlertedAt: new Date('2026-09-29T08:00:00Z') },
+  ];
+  // Target hour 16 on a Tuesday
+  const tuesday1550 = new Date('2026-09-29T10:20:00Z'); // 15:50 IST, Tuesday
+  const eligibleFor16 = filterEligibleTopics(candidates, tuesday1550, 16);
+  assert.equal(eligibleFor16.length, 1);
+  assert.equal(eligibleFor16[0].id, 't1');
+
+  // 2. Two-Phase Pre-fetch (T - 10 min)
+  const topics = [];
+  const snapshots = [];
+  const diffs = [];
+  const mockDb = {
+    topic: {
+      findMany: async ({ where = {} } = {}) => {
+        return topics.filter((t) => {
+          if (where.alertEnabled !== undefined && t.alertEnabled !== where.alertEnabled) return false;
+          if (where.alertEmail?.not === null && !t.alertEmail) return false;
+          if (where.alertHour !== undefined && t.alertHour !== where.alertHour) return false;
+          return true;
+        });
+      },
+      findUnique: async ({ where }) => topics.find((t) => t.id === where.id) || null,
+      update: async ({ where, data }) => {
+        const t = topics.find((item) => item.id === where.id);
+        if (!t) throw new Error('Topic not found');
+        Object.assign(t, data);
+        return t;
+      },
+    },
+    snapshot: {
+      findFirst: async ({ where = {} } = {}) => {
+        const matching = snapshots.filter((s) => !where.topicId || s.topicId === where.topicId);
+        return matching[matching.length - 1] || null;
+      },
+      create: async ({ data }) => {
+        const s = { id: `snap-${snapshots.length + 1}`, ...data };
+        snapshots.push(s);
+        return s;
+      },
+    },
+    diff: {
+      findFirst: async ({ where = {} } = {}) => {
+        const matching = diffs.filter((d) => {
+          if (where.topicId && d.topicId !== where.topicId) return false;
+          if (where.alerted !== undefined && d.alerted !== where.alerted) return false;
+          return true;
+        });
+        return matching[matching.length - 1] || null;
+      },
+      create: async ({ data }) => {
+        const d = { id: `diff-${diffs.length + 1}`, ...data, detectedAt: new Date() };
+        diffs.push(d);
+        return d;
+      },
+      update: async ({ where, data }) => {
+        const d = diffs.find((item) => item.id === where.id);
+        if (!d) throw new Error('Diff not found');
+        Object.assign(d, data);
+        return d;
+      },
+    },
+    async $transaction(fn) { return fn(this); },
+    _state: { topics, snapshots, diffs },
+  };
+
+  const testTopic = {
+    id: 'topic-pre-1',
+    name: 'UPSC Notification Track',
+    query: 'upsc cse 2026 notification',
+    alertEmail: 'candidate@example.org',
+    alertEnabled: true,
+    alertHour: 16,
+    alertDays: 'weekdays',
+    alertFrequency: '1d',
+    lastAlertedAt: null,
+  };
+  mockDb._state.topics.push(testTopic);
+
+  // Baseline snapshot
+  mockDb._state.snapshots.push({
+    id: 'snap-1',
+    topicId: 'topic-pre-1',
+    rawData: {
+      search: [{ title: 'UPSC Prelims', link: 'https://upsc.gov.in/prelims', snippet: 'Exam notification pending' }],
+      news: [{ title: 'UPSC 2026 News', link: 'https://news.example.org/upsc', date: 'Yesterday' }],
+    },
+    pulledAt: new Date('2026-09-28T10:00:00Z'),
+  });
+
+  // Client returns updated snippet
+  const mockClient = {
+    pullSnapshot: async () => ({
+      search: [{ title: 'UPSC Prelims', link: 'https://upsc.gov.in/prelims', snippet: 'Official notification released today' }],
+      news: [{ title: 'UPSC 2026 News', link: 'https://news.example.org/upsc', date: 'Just now' }],
+      pulledAt: new Date().toISOString(),
+    }),
+  };
+
+  // Run pre-fetch at 15:50 IST (targetHour 16)
+  const prefetchRes = await prefetchUpcomingTopics({
+    db: mockDb,
+    client: mockClient,
+    gemini: null,
+    logger: { info() {}, warn() {}, error() {} },
+    now: tuesday1550,
+  });
+
+  assert.equal(prefetchRes.prefetched, 1);
+  assert.equal(prefetchRes.targetHour, 16);
+
+  // Verify: Diff was created with alerted: false, topic was NOT alerted yet
+  assert.equal(mockDb._state.diffs.length, 1);
+  assert.equal(mockDb._state.diffs[0].alerted, false);
+  assert.equal(testTopic.lastAlertedAt, null);
+
+  // 3. Two-Phase Dispatch (T - 0 min)
+  const origTransport = nodemailer.createTransport;
+  const smtpNames = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'ALERT_FROM'];
+  const prevEnv = Object.fromEntries(smtpNames.map((n) => [n, process.env[n]]));
+  process.env.SMTP_HOST = 'smtp.example.org';
+  process.env.SMTP_PORT = '587';
+  process.env.SMTP_USER = 'user';
+  process.env.SMTP_PASS = 'pass';
+  process.env.ALERT_FROM = 'Notice Me <alerts@example.org>';
+
+  let deliveredMail = null;
+  nodemailer.createTransport = () => ({
+    sendMail: async (mail) => {
+      deliveredMail = mail;
+      return { accepted: ['candidate@example.org'], rejected: [] };
+    },
+  });
+
+  try {
+    const tuesday1600 = new Date('2026-09-29T10:30:00Z'); // 16:00 IST
+    const dispatchRes = await dispatchDueAlerts({
+      db: mockDb,
+      client: mockClient,
+      gemini: null,
+      logger: { info() {}, warn() {}, error() {} },
+      now: tuesday1600,
+    });
+
+    assert.equal(dispatchRes.alerted, 1);
+    assert.equal(dispatchRes.checked, 1);
+    assert.ok(deliveredMail);
+    assert.equal(deliveredMail.to, 'candidate@example.org');
+    assert.match(deliveredMail.subject, /Notice Me update: UPSC Notification Track/);
+    assert.equal(mockDb._state.diffs[0].alerted, true);
+    assert.ok(testTopic.lastAlertedAt);
+
+    // 4. Public Trending Radar pre-warm
+    const trendClient = {
+      pullSnapshot: async () => ({
+        search: [{ title: 'Trend Top Search', link: 'https://example.gov.in', snippet: 'Latest update' }],
+        news: [{ title: 'Trend Hot News', link: 'https://news.gov.in', date: 'Today' }],
+        pulledAt: new Date().toISOString(),
+      }),
+    };
+    const trendRes = await refreshTrendingRadar({
+      client: trendClient,
+      gemini: null,
+      logger: { info() {}, warn() {} },
+    });
+    assert.equal(trendRes.refreshed, 8);
+    const cached = getCachedTrending();
+    assert.equal(cached.length, 8);
+    assert.ok(cached.every((item) => typeof item.lastRefreshed === 'string'));
+  } finally {
+    nodemailer.createTransport = origTransport;
+    for (const n of smtpNames) {
+      if (prevEnv[n] === undefined) delete process.env[n];
+      else process.env[n] = prevEnv[n];
+    }
+  }
+});
+
 
 

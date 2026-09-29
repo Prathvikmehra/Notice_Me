@@ -1,13 +1,15 @@
 import { getDb } from './db.js';
 import { createSerpApiClient } from '../../../scripts/serpapi-client.js';
 import { diff } from '../../../scripts/diff-engine.js';
+import { getGeminiClient } from './geminiService.js';
 import * as alertService from './alertService.js';
 
 /**
  * Pulls a fresh snapshot for a single topic, diffs against the previous snapshot,
  * saves new snapshots/diffs, and triggers an alert if configured and changes were found.
  */
-export async function syncTopic(topicId, database = getDb, customClient = null) {
+export async function syncTopic(topicId, database = getDb, customClient = null, customGemini = undefined, options = {}) {
+  const { skipAlert = false } = options;
   const db = typeof database === 'function' ? database() : database;
   const topic = await db.topic.findUnique({ where: { id: topicId } });
   if (!topic) throw new Error('Topic not found.');
@@ -16,6 +18,16 @@ export async function syncTopic(topicId, database = getDb, customClient = null) 
   const rawData = await client.pullSnapshot(topic.query);
   if (!rawData?.search?.length || !rawData?.news?.length) {
     throw new Error('Refusing an empty or partial snapshot from search provider.');
+  }
+
+  const gemini = customGemini !== undefined ? customGemini : getGeminiClient();
+  if (gemini) {
+    try {
+      const aiBriefing = await gemini.generateBriefing(topic, rawData);
+      if (aiBriefing) rawData.aiBriefing = aiBriefing;
+    } catch (err) {
+      console.warn('Gemini briefing generation skipped:', err.message);
+    }
   }
 
   const { snapshot, change, isBaseline } = await db.$transaction(async (tx) => {
@@ -41,10 +53,24 @@ export async function syncTopic(topicId, database = getDb, customClient = null) 
       return { snapshot: current, change: null, isBaseline: false };
     }
 
+    let diffSummary = result.summary;
+    if (gemini) {
+      try {
+        const humanSummary = await gemini.generateDiffSummary(topic, {
+          previous: previous.rawData,
+          current: rawData,
+          rawSummary: result.summary,
+        });
+        if (humanSummary) diffSummary = humanSummary;
+      } catch (err) {
+        console.warn('Gemini diff explanation skipped:', err.message);
+      }
+    }
+
     const createdDiff = await tx.diff.create({
       data: {
         topicId: topic.id,
-        summary: result.summary,
+        summary: diffSummary,
         sourceUrls: result.sourceUrls,
         alerted: false,
       },
@@ -53,7 +79,7 @@ export async function syncTopic(topicId, database = getDb, customClient = null) 
     return { snapshot: current, change: createdDiff, isBaseline: false };
   }, { isolationLevel: 'Serializable' });
 
-  if (change && topic.alertEnabled && topic.alertEmail) {
+  if (!skipAlert && change && topic.alertEnabled && topic.alertEmail) {
     try {
       await alertService.sendDiffAlert(topic, change);
       await db.diff.update({ where: { id: change.id }, data: { alerted: true } });
