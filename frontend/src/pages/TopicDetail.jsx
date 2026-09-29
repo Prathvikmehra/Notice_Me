@@ -3,13 +3,57 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { getLatestSnapshot, getTimeline, updateAlertSettings, syncTopic } from '../api/client.js';
 import TimelineView from '../components/TimelineView.jsx';
 
+const STANDARD_FREQS = ['1d', '2d', '3d', '5d', '7d', '14d', '30d'];
+
+function getOrdinal(n) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function isMonthlyCadence(freq, isCustom = false) {
+  if (isCustom) return false;
+  const str = String(freq || '').toLowerCase().trim();
+  return str === '30d' || str === 'monthly' || str === '1m';
+}
+
+function getFrequencyLabel(freq) {
+  if (!freq) return 'daily';
+  const str = String(freq).toLowerCase();
+  if (str === '1d' || str === 'daily') return 'daily';
+  if (str === '2d') return 'every 2 days';
+  if (str === '3d') return 'every 3 days';
+  if (str === '5d') return 'every 5 days';
+  if (str === '7d' || str === 'weekly' || str === '1w') return 'weekly';
+  if (str === '14d' || str === 'biweekly' || str === '2w') return 'bi-weekly';
+  if (str === '30d' || str === 'monthly' || str === '1m') return 'monthly';
+  const match = str.match(/^(\d+)d?$/);
+  if (match) return `every ${match[1]} days`;
+  return `every ${freq}`;
+}
+
 export default function TopicDetail({ topic, onDelete, onAlertChange, refreshToken }) {
   const { user } = useAuth();
   const [diffs, setDiffs] = useState([]);
   const [snapshot, setSnapshot] = useState(null);
   const [enabled, setEnabled] = useState(Boolean(topic.alertEnabled));
-  const [frequency] = useState(topic.alertFrequency || '3h');
+  const [frequency, setFrequency] = useState(topic.alertFrequency || '1d');
+  const [isCustomFreq, setIsCustomFreq] = useState(!STANDARD_FREQS.includes(topic.alertFrequency || '1d'));
+  const [customDays, setCustomDays] = useState(() => {
+    const match = String(topic.alertFrequency || '').match(/^(\d+)d?$/);
+    return match ? parseInt(match[1], 10) : 10;
+  });
   const [alertHour, setAlertHour] = useState(topic.alertHour ?? 12);
+  const [alertDays, setAlertDays] = useState(() => {
+    const freq = topic.alertFrequency || '1d';
+    const isCustom = !STANDARD_FREQS.includes(freq);
+    if (isMonthlyCadence(freq, isCustom)) {
+      return /^(?:[1-9]|[12][0-9]|30)$/.test(String(topic.alertDays || '').trim())
+        ? String(topic.alertDays).trim()
+        : '1';
+    }
+    return topic.alertDays || 'weekdays';
+  });
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -18,8 +62,23 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
 
   useEffect(() => {
     setEnabled(Boolean(topic.alertEnabled));
+    const freq = topic.alertFrequency || '1d';
+    setFrequency(freq);
+    const custom = !STANDARD_FREQS.includes(freq);
+    setIsCustomFreq(custom);
+    if (custom) {
+      const match = String(freq).match(/^(\d+)d?$/);
+      if (match) setCustomDays(parseInt(match[1], 10));
+    }
     setAlertHour(topic.alertHour ?? 12);
-  }, [topic.alertEnabled, topic.alertHour]);
+    if (isMonthlyCadence(freq, custom)) {
+      setAlertDays(/^(?:[1-9]|[12][0-9]|30)$/.test(String(topic.alertDays || '').trim())
+        ? String(topic.alertDays).trim()
+        : '1');
+    } else {
+      setAlertDays(topic.alertDays || 'weekdays');
+    }
+  }, [topic.alertEnabled, topic.alertFrequency, topic.alertHour, topic.alertDays]);
   useEffect(() => { setMessage(''); }, [topic.id]);
   useEffect(() => {
     let active = true;
@@ -69,6 +128,28 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
     }
   }
 
+  function handleFrequencyChange(newFreqVal) {
+    if (newFreqVal === 'custom') {
+      setIsCustomFreq(true);
+      setFrequency(`${customDays}d`);
+      if (/^(?:[1-9]|[12][0-9]|30)$/.test(String(alertDays).trim())) {
+        setAlertDays('weekdays');
+      }
+    } else {
+      setIsCustomFreq(false);
+      setFrequency(newFreqVal);
+      if (isMonthlyCadence(newFreqVal, false)) {
+        if (!/^(?:[1-9]|[12][0-9]|30)$/.test(String(alertDays).trim())) {
+          setAlertDays('1');
+        }
+      } else {
+        if (/^(?:[1-9]|[12][0-9]|30)$/.test(String(alertDays).trim())) {
+          setAlertDays('weekdays');
+        }
+      }
+    }
+  }
+
   async function saveAlerts(event) {
     event.preventDefault();
     setBusy(true);
@@ -80,11 +161,20 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
         alertEnabled: enabled,
         alertFrequency: frequency,
         alertHour: enabled ? Number(alertHour) : null,
-        alertDays: 'weekdays',
+        alertDays,
       });
       onAlertChange(updated);
-      const hourLabel = alertHour === 12 ? '12 PM' : alertHour === 0 ? '12 AM' : alertHour > 12 ? `${alertHour - 12} PM` : `${alertHour} AM`;
-      setMessage(updated.alertEnabled ? `Alerts scheduled for ${hourLabel} on weekdays.` : 'Alerts disabled.');
+      const hourLabel = alertHour === 12 ? '12:00 PM' : alertHour === 0 ? '12:00 AM' : alertHour > 12 ? `${alertHour - 12}:00 PM` : `${alertHour}:00 AM`;
+      let cadenceDesc;
+      if (isMonthlyCadence(frequency, isCustomFreq)) {
+        const d = /^(?:[1-9]|[12][0-9]|30)$/.test(String(alertDays).trim()) ? Number(alertDays) : 1;
+        cadenceDesc = `monthly on the ${getOrdinal(d)} of every month${d >= 28 ? ' (Feb 28 in Feb)' : ''}`;
+      } else {
+        const freqLabel = getFrequencyLabel(frequency);
+        const dayLabel = alertDays === 'weekdays' ? 'on working days (Mon–Fri)' : alertDays === 'all' ? 'every day' : `every ${alertDays.toUpperCase()}`;
+        cadenceDesc = `${freqLabel} ${dayLabel}`;
+      }
+      setMessage(updated.alertEnabled ? `Alerts scheduled ${cadenceDesc} at ${hourLabel}.` : 'Alerts disabled.');
     } catch (cause) { setError(cause.message); }
     finally { setBusy(false); }
   }
@@ -257,28 +347,115 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
             </span>
           </label>
 
-          <label htmlFor="alert-hour">Delivery window (Working days Mon–Fri)</label>
-          <select
-            id="alert-hour"
-            value={alertHour}
-            onChange={(e) => setAlertHour(Number(e.target.value))}
-            disabled={!enabled}
-            style={{ marginBottom: '4px' }}
-          >
-            <option value={12}>12:00 PM (Noon)</option>
-            <option value={13}>1:00 PM</option>
-            <option value={14}>2:00 PM</option>
-            <option value={15}>3:00 PM</option>
-            <option value={16}>4:00 PM</option>
-            <option value={17}>5:00 PM</option>
-            <option value={18}>6:00 PM</option>
-            <option value={19}>7:00 PM</option>
-            <option value={20}>8:00 PM</option>
-            <option value={21}>9:00 PM</option>
-            <option value={22}>10:00 PM</option>
-            <option value={23}>11:00 PM</option>
-            <option value={0}>12:00 AM (Midnight)</option>
-          </select>
+          <div className="schedule-controls-grid">
+            <div className="schedule-control-field">
+              <label htmlFor="alert-frequency">Frequency</label>
+              <select
+                id="alert-frequency"
+                value={isCustomFreq ? 'custom' : frequency}
+                onChange={(e) => handleFrequencyChange(e.target.value)}
+                disabled={!enabled}
+              >
+                <option value="1d">Daily (Every day)</option>
+                <option value="2d">Every 2 days</option>
+                <option value="3d">Every 3 days</option>
+                <option value="5d">Every 5 days</option>
+                <option value="7d">Weekly (Every 7 days)</option>
+                <option value="14d">Bi-weekly (Every 2 weeks)</option>
+                <option value="30d">Monthly (Choose date)</option>
+                <option value="custom">Custom interval…</option>
+              </select>
+            </div>
+
+            {isCustomFreq && (
+              <div className="schedule-control-field">
+                <label htmlFor="custom-days">Days Interval</label>
+                <input
+                  id="custom-days"
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={customDays}
+                  onChange={(e) => {
+                    const days = Math.max(1, parseInt(e.target.value, 10) || 1);
+                    setCustomDays(days);
+                    setFrequency(`${days}d`);
+                  }}
+                  disabled={!enabled}
+                  style={{
+                    border: 'var(--border)',
+                    boxShadow: 'var(--shadow-sm)',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                  }}
+                />
+              </div>
+            )}
+
+            {isMonthlyCadence(frequency, isCustomFreq) ? (
+              <div className="schedule-control-field">
+                <label htmlFor="alert-date">On Date of Month</label>
+                <select
+                  id="alert-date"
+                  value={alertDays}
+                  onChange={(e) => setAlertDays(e.target.value)}
+                  disabled={!enabled}
+                >
+                  {Array.from({ length: 30 }, (_, i) => i + 1).map((date) => (
+                    <option key={date} value={String(date)}>
+                      {getOrdinal(date)} of every month{date >= 28 ? ' (Feb 28 in Feb)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="schedule-control-field">
+                <label htmlFor="alert-days">On Day(s)</label>
+                <select
+                  id="alert-days"
+                  value={alertDays}
+                  onChange={(e) => setAlertDays(e.target.value)}
+                  disabled={!enabled}
+                >
+                  <option value="weekdays">Working days (Mon–Fri)</option>
+                  <option value="all">Every day (Mon–Sun)</option>
+                  <option value="mon">Every Monday</option>
+                  <option value="tue">Every Tuesday</option>
+                  <option value="wed">Every Wednesday</option>
+                  <option value="thu">Every Thursday</option>
+                  <option value="fri">Every Friday</option>
+                  <option value="sat">Every Saturday</option>
+                  <option value="sun">Every Sunday</option>
+                </select>
+              </div>
+            )}
+
+            <div className="schedule-control-field">
+              <label htmlFor="alert-hour">Delivery Time</label>
+              <select
+                id="alert-hour"
+                value={alertHour}
+                onChange={(e) => setAlertHour(Number(e.target.value))}
+                disabled={!enabled}
+              >
+                <option value={12}>12:00 PM (Noon)</option>
+                <option value={13}>1:00 PM</option>
+                <option value={14}>2:00 PM</option>
+                <option value={15}>3:00 PM</option>
+                <option value={16}>4:00 PM</option>
+                <option value={17}>5:00 PM</option>
+                <option value={18}>6:00 PM</option>
+                <option value={19}>7:00 PM</option>
+                <option value={20}>8:00 PM</option>
+                <option value={21}>9:00 PM</option>
+                <option value={22}>10:00 PM</option>
+                <option value={23}>11:00 PM</option>
+                <option value={0}>12:00 AM (Midnight)</option>
+              </select>
+            </div>
+          </div>
 
           <div className="alert-destination-box">
             <span className="destination-label">DELIVER TO ACCOUNT EMAIL</span>
@@ -293,7 +470,13 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
             {busy ? 'Saving schedule…' : 'Save notification preferences'}
           </button>
           <small>
-            {enabled ? 'Hourly cron checks for verified changes on weekdays.' : 'Alerts are turned off for this notice.'}
+            {enabled
+              ? `Scheduled updates delivered ${
+                  isMonthlyCadence(frequency, isCustomFreq)
+                    ? `monthly on the ${getOrdinal(/^(?:[1-9]|[12][0-9]|30)$/.test(String(alertDays).trim()) ? Number(alertDays) : 1)} of every month${Number(alertDays) >= 28 ? ' (Feb 28 in Feb)' : ''}`
+                    : `${getFrequencyLabel(frequency)} ${alertDays === 'weekdays' ? 'on working days' : alertDays === 'all' ? 'every day' : `on ${alertDays.toUpperCase()}s`}`
+                } at ${alertHour === 12 ? '12:00 PM' : alertHour === 0 ? '12:00 AM' : alertHour > 12 ? `${alertHour - 12}:00 PM` : `${alertHour}:00 AM`}.`
+              : 'Alerts are turned off for this notice.'}
           </small>
         </form>
       </section>

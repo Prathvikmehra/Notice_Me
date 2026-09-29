@@ -179,6 +179,23 @@ test('User data isolation and search across topics/diffs', async () => {
     assert.equal(settingsRes.body.topic.alertHour, 14);
     assert.equal(settingsRes.body.topic.alertDays, 'weekdays');
 
+    // Monthly frequency with specific date of month (e.g. 30th - max allowed)
+    const monthlyRes = await call(`/api/topics/${user1TopicId}/alert-settings`, 'POST', {
+      alertFrequency: '30d',
+      alertDays: '30',
+    });
+    assert.equal(monthlyRes.status, 200);
+    assert.equal(monthlyRes.body.topic.alertFrequency, '30d');
+    assert.equal(monthlyRes.body.topic.alertDays, '30');
+
+    // Weekly on specific weekday (e.g. Tuesday)
+    const weeklyRes = await call(`/api/topics/${user1TopicId}/alert-settings`, 'POST', {
+      alertFrequency: '7d',
+      alertDays: 'tue',
+    });
+    assert.equal(weeklyRes.status, 200);
+    assert.equal(weeklyRes.body.topic.alertDays, 'tue');
+
     // Rejection of invalid alertHour (outside 12 PM - 12 AM window)
     const invalidHour = await call(`/api/topics/${user1TopicId}/alert-settings`, 'POST', {
       alertHour: 4,
@@ -186,12 +203,25 @@ test('User data isolation and search across topics/diffs', async () => {
     assert.equal(invalidHour.status, 400);
     assert.match(invalidHour.body.error.message, /alertHour must be between 12 PM/);
 
-    // Rejection of invalid alertDays
+    // Rejection of invalid alertDays (neither weekday nor 1-30 date)
     const invalidDays = await call(`/api/topics/${user1TopicId}/alert-settings`, 'POST', {
       alertDays: 'weekends-only',
     });
     assert.equal(invalidDays.status, 400);
     assert.match(invalidDays.body.error.message, /alertDays must be weekdays or all/);
+
+    // Day 31 is now rejected (day capped at 30)
+    const invalidDate31 = await call(`/api/topics/${user1TopicId}/alert-settings`, 'POST', {
+      alertDays: '31',
+    });
+    assert.equal(invalidDate31.status, 400);
+    assert.match(invalidDate31.body.error.message, /alertDays must be weekdays or all/);
+
+    const invalidDateNum = await call(`/api/topics/${user1TopicId}/alert-settings`, 'POST', {
+      alertDays: '32',
+    });
+    assert.equal(invalidDateNum.status, 400);
+    assert.match(invalidDateNum.body.error.message, /alertDays must be weekdays or all/);
 
     // Add a diff for search test
     db._state.diffs.push({
@@ -245,4 +275,87 @@ test('Cron scheduler initialization and error resilience', async () => {
     /Database client with topic model is required/
   );
 });
+
+test('10-minute initial alert and next-day scheduled alert logic', async () => {
+  const { isSameDay } = await import('../backend/src/services/cronService.js');
+  const { sendInitialAlert } = await import('../backend/src/services/alertService.js');
+
+  // isSameDay correctly handles same vs different days
+  const today = new Date('2026-09-29T10:00:00Z');
+  const laterToday = new Date('2026-09-29T18:00:00Z');
+  const tomorrow = new Date('2026-09-30T10:00:00Z');
+  assert.equal(isSameDay(today, laterToday, 'UTC'), true);
+  assert.equal(isSameDay(today, tomorrow, 'UTC'), false);
+  assert.equal(isSameDay(null, today), false);
+
+  // sendInitialAlert sends formatted welcome briefing
+  const env = { SMTP_HOST: 'smtp.example.org', SMTP_PORT: '587', SMTP_USER: 'demo', SMTP_PASS: 'fake', ALERT_FROM: 'Notice Me <alerts@example.org>' };
+  const topic = { name: 'PM Kisan Scheme', alertEmail: 'farmer@example.org', alertHour: 14 };
+  const snapshot = {
+    rawData: {
+      search: [{ title: 'PM Kisan Official', link: 'https://pmkisan.gov.in', snippet: 'Installment released' }],
+      news: [{ title: 'New eligibility rules', link: 'https://news.example.org/kisan', source: 'National News' }],
+    },
+  };
+  let sentMail;
+  const createTransport = () => ({
+    sendMail: async (mail) => { sentMail = mail; return { accepted: [topic.alertEmail], rejected: [] }; },
+  });
+  const sent = await sendInitialAlert(topic, snapshot, { env, createTransport });
+  assert.equal(sent, true);
+  assert.match(sentMail.subject, /Notice Me Intelligence: PM Kisan Scheme/);
+  assert.match(sentMail.text, /Installment released/);
+  assert.match(sentMail.text, /https:\/\/news.example.org\/kisan/);
+  assert.match(sentMail.text, /Starting tomorrow, scheduled alerts will be delivered at 2:00 PM on weekdays/);
+});
+
+test('Flexible multi-day intervals and specific weekday schedule logic', async () => {
+  const { getCalendarDaysDiff } = await import('../backend/src/services/cronService.js');
+
+  const d1 = new Date('2026-09-29T12:00:00Z');
+  const d2 = new Date('2026-09-30T12:00:00Z');
+  const d3 = new Date('2026-10-01T12:00:00Z');
+  const d4 = new Date('2026-10-06T12:00:00Z');
+
+  assert.equal(getCalendarDaysDiff(d1, d1, 'UTC'), 0);
+  assert.equal(getCalendarDaysDiff(d1, d2, 'UTC'), 1);
+  assert.equal(getCalendarDaysDiff(d1, d3, 'UTC'), 2);
+  assert.equal(getCalendarDaysDiff(d1, d4, 'UTC'), 7);
+  assert.equal(getCalendarDaysDiff(null, d1), 999);
+
+  // Dynamic frequency parsing
+  const { parseFrequencyToDays } = await import('../backend/src/services/cronService.js');
+  assert.equal(parseFrequencyToDays('daily'), 1);
+  assert.equal(parseFrequencyToDays('1d'), 1);
+  assert.equal(parseFrequencyToDays('2d'), 2);
+  assert.equal(parseFrequencyToDays('3d'), 3);
+  assert.equal(parseFrequencyToDays('5d'), 5);
+  assert.equal(parseFrequencyToDays('weekly'), 7);
+  assert.equal(parseFrequencyToDays('7d'), 7);
+  assert.equal(parseFrequencyToDays('biweekly'), 14);
+  assert.equal(parseFrequencyToDays('14d'), 14);
+  assert.equal(parseFrequencyToDays('monthly'), 30);
+  assert.equal(parseFrequencyToDays('30d'), 30);
+  assert.equal(parseFrequencyToDays('45d'), 45);
+  assert.equal(parseFrequencyToDays('invalid-frequency-xyz'), null);
+
+  // February 28 schedule rule: for monthly topics with target day 28, 29, 30, deliver on Feb 28th
+  const { getLocalTimeDetails } = await import('../backend/src/services/cronService.js');
+  const feb28 = new Date('2026-02-28T09:30:00Z'); // 3 PM IST
+  const feb27 = new Date('2026-02-27T09:30:00Z');
+  const jan30 = new Date('2026-01-30T09:30:00Z');
+
+  const feb28Details = getLocalTimeDetails('Asia/Kolkata', feb28);
+  assert.equal(feb28Details.month, 2);
+  assert.equal(feb28Details.dayOfMonth, 28);
+
+  const feb27Details = getLocalTimeDetails('Asia/Kolkata', feb27);
+  assert.equal(feb27Details.month, 2);
+  assert.equal(feb27Details.dayOfMonth, 27);
+
+  const jan30Details = getLocalTimeDetails('Asia/Kolkata', jan30);
+  assert.equal(jan30Details.month, 1);
+  assert.equal(jan30Details.dayOfMonth, 30);
+});
+
 

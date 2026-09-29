@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { getDb } from '../services/db.js';
-import { isAlertConfigured } from '../services/alertService.js';
+import * as alertService from '../services/alertService.js';
 import { syncTopic } from '../services/topicSyncService.js';
+import { parseFrequencyToDays } from '../services/cronService.js';
 import { requireAuth } from '../middleware/auth.js';
+
+const isAlertConfigured = alertService.isAlertConfigured;
 
 const attempt = (fn) => (req, res, next) => Promise.resolve().then(() => fn(req, res)).catch(next);
 const problem = (status, message) => Object.assign(new Error(message), { status });
@@ -57,12 +60,50 @@ export function createTopicsRouter(database = getDb) {
       if (count >= MAX_FREE_TOPICS) throw problem(403, `Free accounts can track up to ${MAX_FREE_TOPICS} topics. Upgrade for unlimited.`);
     }
     const activeDb = db();
-    const topic = await activeDb.topic.create({ data: { name, query, category: category || null, userId: req.user.id } });
+    const alertEmail = req.body?.alertEmail || req.user?.email || null;
+    const alertEnabled = req.body?.alertEnabled !== undefined ? Boolean(req.body.alertEnabled) : Boolean(alertEmail);
+    const alertHour = req.body?.alertHour !== undefined ? Number(req.body.alertHour) : 12;
+    const alertDays = req.body?.alertDays || 'weekdays';
+
+    const topic = await activeDb.topic.create({
+      data: {
+        name,
+        query,
+        category: category || null,
+        userId: req.user.id,
+        alertEmail,
+        alertEnabled,
+        alertHour,
+        alertDays,
+      },
+    });
+
     const isMock = database !== getDb || typeof activeDb.snapshot?.create !== 'function';
     if (!isMock && process.env.NODE_ENV !== 'test') {
+      // 1. Initial baseline pull immediately
       syncTopic(topic.id, activeDb).catch((err) => {
         console.error(`Initial snapshot pull failed for topic ${topic.id}:`, err.message);
       });
+
+      // 2. Schedule 10-minute check & email
+      const delay = Number(process.env.INITIAL_ALERT_DELAY_MS || 10 * 60 * 1000);
+      setTimeout(async () => {
+        try {
+          const fresh = await activeDb.topic.findUnique({ where: { id: topic.id } });
+          if (fresh?.alertEmail && !fresh.lastAlertedAt) {
+            const syncResult = await syncTopic(fresh.id, activeDb);
+            if (!syncResult.diff && isAlertConfigured()) {
+              await alertService.sendInitialAlert(fresh, syncResult.snapshot);
+            }
+            await activeDb.topic.update({
+              where: { id: fresh.id },
+              data: { lastAlertedAt: new Date() },
+            });
+          }
+        } catch (err) {
+          console.error(`10-minute alert failed for topic ${topic.id}:`, err.message);
+        }
+      }, delay);
     }
     res.status(201).json({ topic });
   }));
@@ -121,7 +162,12 @@ export function createTopicsRouter(database = getDb) {
     const alertDays = req.body?.alertDays;
     if (email && (email.length > 254 || !EMAIL.test(email))) throw problem(400, 'Provide a valid email address or null to disable alerts.');
     if (email && !isAlertConfigured()) throw problem(409, 'Email alerts are unavailable until SMTP is configured.');
-    if (alertFrequency !== undefined && !['1h', '3h', '1d', '3d'].includes(alertFrequency)) throw problem(400, 'alertFrequency must be one of: 1h, 3h, 1d, 3d');
+    if (alertFrequency !== undefined) {
+      const days = parseFrequencyToDays(alertFrequency);
+      if (!days || days < 1 || days > 365) {
+        throw problem(400, 'alertFrequency must specify a valid interval (e.g. 1d, 2d, 3d, weekly, monthly, 14d).');
+      }
+    }
     if (alertHour !== undefined && alertHour !== null) {
       const hour = Number(alertHour);
       const validHours = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0];
@@ -129,8 +175,10 @@ export function createTopicsRouter(database = getDb) {
         throw problem(400, 'alertHour must be between 12 PM (12) and 12 AM (0/23).');
       }
     }
-    if (alertDays !== undefined && !['weekdays', 'all'].includes(alertDays)) {
-      throw problem(400, 'alertDays must be weekdays or all.');
+    const VALID_DAYS = ['weekdays', 'all', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    const isMonthDay = /^(?:[1-9]|[12][0-9]|30)$/.test(String(alertDays).trim());
+    if (alertDays !== undefined && !VALID_DAYS.includes(alertDays) && !isMonthDay) {
+      throw problem(400, 'alertDays must be weekdays or all, a specific day (mon-sun), or date of month (1-30).');
     }
     const client = db();
     const existing = await client.topic.findUnique({ where: { id: req.params.id } });

@@ -847,6 +847,44 @@ h1 {
   color: var(--muted);
 }
 
+.schedule-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 12px 0 16px;
+}
+
+.schedule-control-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.schedule-control-field label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--black);
+}
+
+.schedule-control-field select {
+  width: 100%;
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--white);
+  color: var(--black);
+}
+
+.schedule-control-field select:focus {
+  outline: 2px solid var(--black);
+  box-shadow: var(--shadow-md);
+}
+
 /* Neo-Brutalist Toggle Switch */
 .toggle-control {
   display: flex;
