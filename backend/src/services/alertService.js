@@ -60,7 +60,8 @@ export async function sendInitialAlert(topic, snapshot, { env = process.env, cre
   const raw = snapshot?.rawData || snapshot || {};
   const searchResults = raw.search || [];
   const newsResults = raw.news || [];
-  const overviewText = raw.overview?.text || searchResults[0]?.snippet || `Live tracking active for ${topic.name}.`;
+  const briefing = raw.aiBriefing;
+  const overviewText = briefing?.coreStatus || raw.overview?.text || searchResults[0]?.snippet || `Live tracking active for ${topic.name}.`;
   const sources = [
     ...newsResults.slice(0, 3).map((n) => n.link),
     ...searchResults.slice(0, 2).map((s) => s.link),
@@ -81,12 +82,24 @@ export async function sendInitialAlert(topic, snapshot, { env = process.env, cre
   const alertHour = topic.alertHour ?? 12;
   const hourLabel = alertHour === 12 ? '12:00 PM' : alertHour === 0 ? '12:00 AM' : (alertHour > 12 ? `${alertHour - 12}:00 PM` : `${alertHour}:00 AM`);
 
+  const extraPoints = [];
+  if (Array.isArray(briefing?.keyPoints) && briefing.keyPoints.length > 0) {
+    extraPoints.push('Key Highlights:', ...briefing.keyPoints.map((k) => `• [${k.badge}] ${k.text}`), '');
+  }
+  if (Array.isArray(briefing?.deadlines) && briefing.deadlines.length > 0) {
+    extraPoints.push('Important Deadlines:', ...briefing.deadlines.map((d) => `• ${d.title}: ${d.date} (${d.urgency || 'Important'})`), '');
+  }
+  if (briefing?.actionRequired) {
+    extraPoints.push('Recommended Action:', briefing.actionRequired, '');
+  }
+
   const body = [
     `Notice Me has activated tracking for ${subject}.`,
     '',
     `Current Intelligence Briefing:`,
     overviewText,
     '',
+    ...extraPoints,
     ...(sources.length > 0 ? ['Verified Sources:', ...sources.map((url) => `- ${url}`), ''] : []),
     `Schedule Details:`,
     `Starting tomorrow, scheduled alerts will be delivered at ${hourLabel} on weekdays when new changes are detected.`,
