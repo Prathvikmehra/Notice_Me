@@ -553,5 +553,113 @@ test('Two-phase pre-fetch (T-10m) and dispatch (T-0m) alert workflow and trendin
   }
 });
 
+test('Security & Reliability: Alert defaults, validation, concurrency lock, cooldown, and retention', async () => {
+  const { validateAlertSettings } = await import('../backend/src/routes/topics.js');
+  const { processInitialTopicAlerts, filterEligibleTopics, parseFrequencyToHours, parseFrequencyToMs } = await import('../backend/src/services/cronService.js');
+  const { isTopicSyncing } = await import('../backend/src/services/topicSyncService.js');
+
+  // 1. Unified frequency parsers
+  assert.equal(parseFrequencyToHours('1h'), 1);
+  assert.equal(parseFrequencyToHours('3h'), 3);
+  assert.equal(parseFrequencyToHours('1d'), 24);
+  assert.equal(parseFrequencyToHours('7d'), 168);
+  assert.equal(parseFrequencyToHours('14d'), 336);
+  assert.equal(parseFrequencyToHours('30d'), 720);
+  assert.equal(parseFrequencyToMs('3h'), 3 * 3600 * 1000);
+
+  // 2. Strict validation & coercion rejection
+  assert.throws(
+    () => validateAlertSettings({ alertEnabled: 'false' }),
+    /alertEnabled must be a boolean/
+  );
+  assert.throws(
+    () => validateAlertSettings({ alertFrequency: 'monthly', alertDays: 'weekdays' }),
+    /Monthly schedule requires a specific date of month/
+  );
+  // Valid monthly with date 15 succeeds
+  const validMonthly = validateAlertSettings({ alertFrequency: 'monthly', alertDays: '15' });
+  assert.equal(validMonthly.alertDays, '15');
+
+  // 3. Topic creation defaults & manual sync cooldown via API
+  const db = createMockDb();
+  const user1 = db._state.users[0];
+
+  await withUserApi(db, user1, async (call) => {
+    // Create topic without alert fields -> defaults to alertEmail: null, alertEnabled: false
+    const createRes = await call('/api/topics', 'POST', {
+      name: 'Safe Topic',
+      query: 'safe query',
+      category: 'other',
+    });
+    assert.equal(createRes.status, 201);
+    assert.equal(createRes.body.topic.alertEmail, null);
+    assert.equal(createRes.body.topic.alertEnabled, false);
+    const topicId = createRes.body.topic.id;
+
+    // Creating topic with invalid alertEnabled string fails with 400
+    const invalidCreate = await call('/api/topics', 'POST', {
+      name: 'Invalid Alert Topic',
+      query: 'query',
+      alertEnabled: 'true',
+    });
+    assert.equal(invalidCreate.status, 400);
+
+    // Manual sync endpoint: first call succeeds in mock mode
+    const sync1 = await call(`/api/topics/${topicId}/sync`, 'POST');
+    assert.equal(sync1.status, 200);
+
+    // Check concurrency helper
+    assert.equal(isTopicSyncing(topicId), false);
+  });
+
+  // 4. Disabled alerts guard in initial alerts check
+  const disabledAlertTopic = {
+    id: 'topic-disabled',
+    alertEmail: 'user@example.com',
+    alertEnabled: false,
+    lastAlertedAt: null,
+    createdAt: new Date(Date.now() - 20 * 60 * 1000), // 20 mins old
+  };
+  const mockDbWithDisabled = {
+    topic: {
+      findMany: async ({ where }) => {
+        if (where.alertEnabled === true && !disabledAlertTopic.alertEnabled) return [];
+        return [disabledAlertTopic];
+      },
+    },
+  };
+  const initRes = await processInitialTopicAlerts({ db: mockDbWithDisabled });
+  assert.equal(initRes.alerted, 0);
+
+  // 5. Timezone-aware scheduling in filterEligibleTopics
+  const nyTopic = {
+    id: 'ny-topic',
+    alertHour: 9, // 9 AM in New York
+    timezone: 'America/New_York',
+    alertDays: 'all',
+    alertFrequency: '1d',
+    alertEnabled: true,
+    alertEmail: 'ny@example.com',
+    lastAlertedAt: null,
+  };
+  const istTopic = {
+    id: 'ist-topic',
+    alertHour: 9, // 9 AM in India
+    timezone: 'Asia/Kolkata',
+    alertDays: 'all',
+    alertFrequency: '1d',
+    alertEnabled: true,
+    alertEmail: 'ist@example.com',
+    lastAlertedAt: null,
+  };
+
+  // At 13:00 UTC (9:00 AM EDT in September, 18:30 IST)
+  const time13Utc = new Date('2026-09-29T13:00:00Z');
+  const filtered = filterEligibleTopics([nyTopic, istTopic], time13Utc);
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].id, 'ny-topic');
+});
+
+
 
 

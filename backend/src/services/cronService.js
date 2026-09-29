@@ -8,8 +8,9 @@ import { refreshTrendingRadar } from './trendingService.js';
 import * as alertService from './alertService.js';
 
 export function getLocalTimeDetails(timeZone = 'Asia/Kolkata', now = new Date()) {
+  const safeTz = timeZone || 'Asia/Kolkata';
   const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+    timeZone: safeTz,
     hour12: false,
     hour: 'numeric',
     weekday: 'short',
@@ -27,8 +28,9 @@ export function getLocalTimeDetails(timeZone = 'Asia/Kolkata', now = new Date())
 
 export function isSameDay(date1, date2, timeZone = 'Asia/Kolkata') {
   if (!date1 || !date2) return false;
+  const safeTz = timeZone || 'Asia/Kolkata';
   try {
-    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: safeTz, year: 'numeric', month: '2-digit', day: '2-digit' });
     return formatter.format(new Date(date1)) === formatter.format(new Date(date2));
   } catch {
     const d1 = new Date(date1);
@@ -41,8 +43,9 @@ export function isSameDay(date1, date2, timeZone = 'Asia/Kolkata') {
 
 export function getCalendarDaysDiff(date1, date2, timeZone = 'Asia/Kolkata') {
   if (!date1 || !date2) return 999;
+  const safeTz = timeZone || 'Asia/Kolkata';
   try {
-    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: safeTz, year: 'numeric', month: '2-digit', day: '2-digit' });
     const d1Str = formatter.format(new Date(date1));
     const d2Str = formatter.format(new Date(date2));
     const [y1, m1, day1] = d1Str.split('-').map(Number);
@@ -54,6 +57,32 @@ export function getCalendarDaysDiff(date1, date2, timeZone = 'Asia/Kolkata') {
     const msDiff = new Date(date2) - new Date(date1);
     return Math.floor(msDiff / (24 * 60 * 60 * 1000));
   }
+}
+
+export function parseFrequencyToHours(freqStr) {
+  if (!freqStr) return 24;
+  const str = String(freqStr).trim().toLowerCase();
+  if (str === '1h') return 1;
+  if (str === '3h') return 3;
+  if (['daily', '1d'].includes(str)) return 24;
+  if (['weekly', '7d', '1w'].includes(str)) return 168;
+  if (['biweekly', 'bi-weekly', '14d', '2w'].includes(str)) return 336;
+  if (['monthly', '30d', '1m'].includes(str)) return 720;
+  const match = str.match(/^(\d+)\s*(h|hours?|d|days?|w|weeks?|m|months?)?$/i);
+  if (match) {
+    const val = parseInt(match[1], 10);
+    const unit = (match[2] || 'd').charAt(0).toLowerCase();
+    if (unit === 'h') return Math.max(1, val);
+    if (unit === 'd') return Math.max(1, val * 24);
+    if (unit === 'w') return Math.max(1, val * 7 * 24);
+    if (unit === 'm') return Math.max(1, val * 30 * 24);
+  }
+  return null;
+}
+
+export function parseFrequencyToMs(freqStr) {
+  const hours = parseFrequencyToHours(freqStr);
+  return hours !== null ? hours * 60 * 60 * 1000 : null;
 }
 
 export function parseFrequencyToDays(freqStr) {
@@ -76,34 +105,59 @@ export function parseFrequencyToDays(freqStr) {
   return null;
 }
 
-export function filterEligibleTopics(candidates = [], now = new Date(), targetHour = null) {
-  const { hour: currentHour, weekday, month, dayOfMonth, isWeekend } = getLocalTimeDetails('Asia/Kolkata', now);
-  const hourToCheck = targetHour !== null && targetHour !== undefined ? targetHour : currentHour;
-  const currentWeekday = weekday.toLowerCase();
+export function filterEligibleTopics(candidates = [], now = new Date(), options = null) {
+  // Support numeric targetHour as 3rd param or options object
+  const overrideHour = typeof options === 'number' ? options : options?.targetHour;
+  const checkTime = options?.checkTime instanceof Date ? options.checkTime : now;
 
   return candidates.filter((t) => {
-    if (t.alertHour !== undefined && t.alertHour !== null && t.alertHour !== hourToCheck) {
-      return false;
-    }
-    const tz = t.timezone || 'Asia/Kolkata';
-    const daySetting = String(t.alertDays || 'weekdays').toLowerCase().trim();
-    const freq = String(t.alertFrequency || '1d').toLowerCase().trim();
-    const isMonthly = freq === 'monthly' || freq === '30d' || freq === '1m';
+    // 1. Guard against disabled alerts or explicitly null email
+    if (t.alertEnabled === false || t.alertEmail === null) return false;
 
-    // 1. Day / Date check
-    if (isMonthly || /^(?:[1-9]|[12][0-9]|30)$/.test(daySetting)) {
-      const targetDay = Number(daySetting);
-      if (targetDay >= 1 && targetDay <= 30) {
-        if (month === 2) {
-          // In February, target dates 28, 29, 30 are delivered on the 28th
-          if (targetDay >= 28) {
-            if (dayOfMonth !== 28) return false;
-          } else {
-            if (targetDay !== dayOfMonth) return false;
-          }
+    const tz = t.timezone || 'Asia/Kolkata';
+    const { hour: topicHour, weekday, month, dayOfMonth, isWeekend } = getLocalTimeDetails(tz, checkTime);
+    const hourToCheck = overrideHour !== undefined && overrideHour !== null ? overrideHour : topicHour;
+    const currentWeekday = weekday.toLowerCase();
+
+    const freq = String(t.alertFrequency || '1d').toLowerCase().trim();
+    const freqHours = parseFrequencyToHours(freq) || 24;
+    const isSubDaily = freqHours < 24;
+    const isMonthly = ['monthly', '30d', '1m'].includes(freq);
+
+    // 2. Hour check:
+    // Sub-daily frequencies run during any hour provided interval has elapsed.
+    // Daily+ frequencies run only at their scheduled alertHour.
+    if (!isSubDaily) {
+      if (t.alertHour !== undefined && t.alertHour !== null && t.alertHour !== hourToCheck) {
+        return false;
+      }
+    }
+
+    // 3. Day / Date check:
+    const daySetting = String(t.alertDays || 'weekdays').toLowerCase().trim();
+    if (isMonthly) {
+      // Monthly topics require a valid day-of-month (1-30). Default to 1st if invalid.
+      const targetDay = /^(?:[1-9]|[12][0-9]|30)$/.test(daySetting) ? Number(daySetting) : 1;
+      if (month === 2) {
+        // In February, target dates 28, 29, 30 are delivered on the 28th
+        if (targetDay >= 28) {
+          if (dayOfMonth !== 28) return false;
         } else {
           if (targetDay !== dayOfMonth) return false;
         }
+      } else {
+        if (targetDay !== dayOfMonth) return false;
+      }
+    } else if (/^(?:[1-9]|[12][0-9]|30)$/.test(daySetting)) {
+      const targetDay = Number(daySetting);
+      if (month === 2) {
+        if (targetDay >= 28) {
+          if (dayOfMonth !== 28) return false;
+        } else {
+          if (targetDay !== dayOfMonth) return false;
+        }
+      } else {
+        if (targetDay !== dayOfMonth) return false;
       }
     } else {
       if (daySetting === 'weekdays' && isWeekend) return false;
@@ -112,17 +166,24 @@ export function filterEligibleTopics(candidates = [], now = new Date(), targetHo
       }
     }
 
-    // 2. Interval & frequency check
+    // 4. Interval & frequency check:
     if (t.lastAlertedAt) {
-      const daysDiff = getCalendarDaysDiff(t.lastAlertedAt, now, tz);
-      // Already alerted today: skip until at least tomorrow
-      if (daysDiff < 1) return false;
-
-      if (isMonthly) {
-        if (daysDiff < 20) return false;
+      if (isSubDaily) {
+        const elapsedMs = now.getTime() - new Date(t.lastAlertedAt).getTime();
+        const requiredMs = freqHours * 60 * 60 * 1000;
+        // 5 minute tolerance for cron tick alignment
+        if (elapsedMs < (requiredMs - 5 * 60 * 1000)) return false;
       } else {
-        const requiredDays = parseFrequencyToDays(freq);
-        if (daysDiff < requiredDays) return false;
+        const daysDiff = getCalendarDaysDiff(t.lastAlertedAt, now, tz);
+        // Already alerted today in this topic's timezone: skip until at least tomorrow
+        if (daysDiff < 1) return false;
+
+        if (isMonthly) {
+          if (daysDiff < 20) return false;
+        } else {
+          const requiredDays = parseFrequencyToDays(freq) || 1;
+          if (daysDiff < requiredDays) return false;
+        }
       }
     }
     return true;
@@ -131,9 +192,9 @@ export function filterEligibleTopics(candidates = [], now = new Date(), targetHo
 
 /**
  * Pre-fetch phase (T - 10 minutes, runs at minute 50: `50 * * * *`):
- * Looks ahead to the next hour (e.g. at 3:50 PM, targets 4:00 PM topics).
+ * Looks ahead 10 minutes to the upcoming hour in each topic's local timezone.
  * Pulls SerpApi snapshots and generates Gemini summaries ahead of time,
- * saving them with `alerted: false` so that the 4:00 PM dispatch is instantaneous.
+ * saving them with `alerted: false` so that the on-the-hour dispatch is instantaneous.
  */
 export async function prefetchUpcomingTopics({ db, client, gemini, logger = console, now = new Date() } = {}) {
   const activeDb = typeof db === 'function' ? db() : (db || getDb());
@@ -141,21 +202,19 @@ export async function prefetchUpcomingTopics({ db, client, gemini, logger = cons
     throw new Error('Database client with topic model is required');
   }
 
-  const { hour: currentHour } = getLocalTimeDetails('Asia/Kolkata', now);
-  const targetHour = (currentHour + 1) % 24;
-
+  // Look ahead 10 minutes for pre-fetch
+  const targetTime = new Date(now.getTime() + 10 * 60 * 1000);
   const candidates = await activeDb.topic.findMany({
     where: {
       alertEnabled: true,
       alertEmail: { not: null },
-      alertHour: targetHour,
     },
   });
 
-  const topics = filterEligibleTopics(candidates, now, targetHour);
-  if (topics.length === 0) return { prefetched: 0, targetHour, total: 0 };
+  const topics = filterEligibleTopics(candidates, now, { checkTime: targetTime });
+  if (topics.length === 0) return { prefetched: 0, targetTime, total: 0 };
 
-  logger.info(`Cron [Pre-fetch]: Running T-10m data & AI fetch for ${topics.length} topic(s) due at ${targetHour}:00 IST.`);
+  logger.info(`Cron [Pre-fetch]: Running T-10m data & AI fetch for ${topics.length} topic(s).`);
   const apiClient = client || createSerpApiClient();
   let prefetchedCount = 0;
 
@@ -168,13 +227,14 @@ export async function prefetchUpcomingTopics({ db, client, gemini, logger = cons
     }
   }
 
+  const { hour: targetHour } = getLocalTimeDetails('Asia/Kolkata', targetTime);
   logger.info(`Cron [Pre-fetch]: Completed pre-fetch for ${prefetchedCount}/${topics.length} topic(s).`);
-  return { prefetched: prefetchedCount, targetHour, total: topics.length };
+  return { prefetched: prefetchedCount, targetHour, targetTime, total: topics.length };
 }
 
 /**
  * Dispatch phase (Runs at minute 0: `0 * * * *`):
- * Dispatches alerts for topics scheduled for the current hour.
+ * Dispatches alerts for topics scheduled for the current hour in their timezone.
  * Sends pre-warmed alerts immediately. If pre-fetch didn't run, executes fallback on-demand.
  */
 export async function dispatchDueAlerts({ db, client, gemini, logger = console, now = new Date() } = {}) {
@@ -183,20 +243,17 @@ export async function dispatchDueAlerts({ db, client, gemini, logger = console, 
     throw new Error('Database client with topic model is required');
   }
 
-  const { hour: currentHour } = getLocalTimeDetails('Asia/Kolkata', now);
-
   const candidates = await activeDb.topic.findMany({
     where: {
       alertEnabled: true,
       alertEmail: { not: null },
-      alertHour: currentHour,
     },
   });
 
-  const topics = filterEligibleTopics(candidates, now, currentHour);
+  const topics = filterEligibleTopics(candidates, now);
   if (topics.length === 0) return { checked: 0, alerted: 0 };
 
-  logger.info(`Cron [Dispatch]: Delivering scheduled alerts for ${topics.length} topic(s) at ${currentHour}:00 IST.`);
+  logger.info(`Cron [Dispatch]: Delivering scheduled alerts for ${topics.length} topic(s).`);
   const apiClient = client || createSerpApiClient();
   let alertedCount = 0;
 
@@ -254,6 +311,7 @@ export async function processDueTopics(params = {}) {
 /**
  * Checks newly created topics that reached the 10-minute mark without receiving their first alert.
  * Pulls fresh data, computes diff, sends email (diff alert or initial briefing), and marks lastAlertedAt.
+ * Strictly verifies alertEnabled: true before syncing or emailing.
  */
 export async function processInitialTopicAlerts({ db, client, logger = console, minAgeMs = Number(process.env.INITIAL_ALERT_DELAY_MS || 10 * 60 * 1000) } = {}) {
   const activeDb = typeof db === 'function' ? db() : (db || getDb());
@@ -263,6 +321,7 @@ export async function processInitialTopicAlerts({ db, client, logger = console, 
   try {
     pending = await activeDb.topic.findMany({
       where: {
+        alertEnabled: true,
         alertEmail: { not: null },
         lastAlertedAt: null,
       },
@@ -272,7 +331,7 @@ export async function processInitialTopicAlerts({ db, client, logger = console, 
   }
 
   const eligible = pending.filter((t) => {
-    if (!t.alertEmail || t.lastAlertedAt) return false;
+    if (!t.alertEmail || !t.alertEnabled || t.lastAlertedAt) return false;
     const created = t.createdAt ? new Date(t.createdAt).getTime() : 0;
     return Date.now() - created >= minAgeMs;
   });
@@ -285,12 +344,16 @@ export async function processInitialTopicAlerts({ db, client, logger = console, 
 
   for (const topic of eligible) {
     try {
-      const syncResult = await syncTopic(topic.id, activeDb, apiClient);
+      const freshTopic = await activeDb.topic.findUnique({ where: { id: topic.id } });
+      if (!freshTopic || !freshTopic.alertEnabled || !freshTopic.alertEmail || freshTopic.lastAlertedAt) {
+        continue;
+      }
+      const syncResult = await syncTopic(freshTopic.id, activeDb, apiClient);
       if (!syncResult.diff && alertService.isAlertConfigured()) {
-        await alertService.sendInitialAlert(topic, syncResult.snapshot);
+        await alertService.sendInitialAlert(freshTopic, syncResult.snapshot);
       }
       await activeDb.topic.update({
-        where: { id: topic.id },
+        where: { id: freshTopic.id },
         data: { lastAlertedAt: new Date() },
       });
       alertedCount++;

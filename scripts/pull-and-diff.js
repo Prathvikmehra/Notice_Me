@@ -4,18 +4,39 @@ import { createSerpApiClient } from './serpapi-client.js';
 import { diff } from './diff-engine.js';
 import * as alertService from '../backend/src/services/alertService.js';
 
-const FREQUENCIES = {
+export const FREQUENCIES = {
   '1h': 60 * 60 * 1000,
   '3h': 3 * 60 * 60 * 1000,
   '1d': 24 * 60 * 60 * 1000,
   '3d': 3 * 24 * 60 * 60 * 1000,
 };
 
+export function parseFrequencyToMs(freqStr) {
+  if (!freqStr) return 24 * 60 * 60 * 1000;
+  const str = String(freqStr).trim().toLowerCase();
+  if (str === '1h') return 60 * 60 * 1000;
+  if (str === '3h') return 3 * 60 * 60 * 1000;
+  if (['daily', '1d'].includes(str)) return 24 * 60 * 60 * 1000;
+  if (['weekly', '7d', '1w'].includes(str)) return 7 * 24 * 60 * 60 * 1000;
+  if (['biweekly', 'bi-weekly', '14d', '2w'].includes(str)) return 14 * 24 * 60 * 60 * 1000;
+  if (['monthly', '30d', '1m'].includes(str)) return 30 * 24 * 60 * 60 * 1000;
+  const match = str.match(/^(\d+)\s*(h|hours?|d|days?|w|weeks?|m|months?)?$/i);
+  if (match) {
+    const val = parseInt(match[1], 10);
+    const unit = (match[2] || 'd').charAt(0).toLowerCase();
+    if (unit === 'h') return Math.max(1, val) * 60 * 60 * 1000;
+    if (unit === 'd') return Math.max(1, val) * 24 * 60 * 60 * 1000;
+    if (unit === 'w') return Math.max(1, val) * 7 * 24 * 60 * 60 * 1000;
+    if (unit === 'm') return Math.max(1, val) * 30 * 24 * 60 * 60 * 1000;
+  }
+  return FREQUENCIES[str] || FREQUENCIES['3h'];
+}
+
 function isAlertDue(topic) {
   if (!topic?.alertEmail) return false;
   if (topic.alertEnabled === false) return false;
   if (topic.lastAlertedAt && topic.alertFrequency) {
-    const minInterval = FREQUENCIES[topic.alertFrequency] || FREQUENCIES['3h'];
+    const minInterval = parseFrequencyToMs(topic.alertFrequency);
     const elapsed = Date.now() - new Date(topic.lastAlertedAt).getTime();
     if (elapsed < minInterval) return false;
   }
@@ -25,10 +46,10 @@ function isAlertDue(topic) {
 export async function runPipeline({ db, client, logger = console }) {
   // Legacy seed rows have no owner and are invisible to the authenticated app.
   const topics = await db.topic.findMany({ where: { userId: { not: null } }, orderBy: { id: 'asc' } });
-  if (topics.some((topic) => topic.alertEmail) && typeof alertService.sendDiffAlert !== 'function') {
+  if (topics.some((topic) => topic.alertEmail && topic.alertEnabled !== false) && typeof alertService.sendDiffAlert !== 'function') {
     throw new Error('alertService.js must export sendDiffAlert(topic, diff) before processing topics with alertEmail.');
   }
-  if (topics.some((topic) => topic.alertEmail) && !alertService.isAlertConfigured?.()) {
+  if (topics.some((topic) => topic.alertEmail && topic.alertEnabled !== false) && !alertService.isAlertConfigured?.()) {
     throw new Error('Email alerts are enabled but SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, or ALERT_FROM is missing.');
   }
   const from = process.env?.ALERT_FROM || '';
@@ -67,6 +88,27 @@ export async function runPipeline({ db, client, logger = console }) {
         const current = await tx.snapshot.create({
           data: { topicId: topic.id, rawData, pulledAt: new Date(rawData.pulledAt) },
         });
+
+        // Prune snapshots beyond retention limit
+        const retentionLimit = Number(process?.env?.SNAPSHOT_RETENTION_LIMIT || 20);
+        if (typeof tx.snapshot.findMany === 'function' && typeof tx.snapshot.deleteMany === 'function') {
+          try {
+            const excess = await tx.snapshot.findMany({
+              where: { topicId: topic.id },
+              orderBy: [{ pulledAt: 'desc' }, { id: 'desc' }],
+              skip: retentionLimit,
+              select: { id: true },
+            });
+            if (excess && excess.length > 0) {
+              await tx.snapshot.deleteMany({
+                where: { id: { in: excess.map((s) => s.id) } },
+              });
+            }
+          } catch {
+            // Retention pruning error is non-critical
+          }
+        }
+
         if (!previous) return null;
         const result = await diff(previous, current);
         if (result === null) return null;
@@ -93,7 +135,6 @@ export async function runPipeline({ db, client, logger = console }) {
       }
       logger.info(`Topic ${topic.id}: snapshot saved${change ? ', diff created' : ', no diff'}.`);
     } catch (error) {
-      // Preserve safe client diagnostics; do not log database/SMTP errors containing credentials.
       if (stage === 'pulling Search and News') throw error;
       throw new Error(`Topic ${topic.id}: failed while ${stage}; pipeline stopped.`);
     }
