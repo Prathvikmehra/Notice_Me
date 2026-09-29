@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { getDb } from '../services/db.js';
 import * as alertService from '../services/alertService.js';
-import { syncTopic } from '../services/topicSyncService.js';
-import { parseFrequencyToDays } from '../services/cronService.js';
+import { syncTopic, isTopicSyncing } from '../services/topicSyncService.js';
+import { parseFrequencyToDays, parseFrequencyToHours } from '../services/cronService.js';
 import { getCachedTrending } from '../services/trendingService.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -14,6 +14,112 @@ const clean = (value) => typeof value === 'string' ? value.trim() : '';
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CATEGORIES = ['scheme', 'exam', 'recruitment', 'case', 'policy', 'admission', 'other'];
 const MAX_FREE_TOPICS = 5;
+const VALID_HOURS = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0];
+const VALID_DAYS = ['weekdays', 'all', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+// Rate limit map: userId -> [timestamp, timestamp, ...]
+const userSyncHistory = new Map();
+
+function checkUserSyncRateLimit(userId) {
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+  const maxSyncs = 10;
+  const timestamps = userSyncHistory.get(userId) || [];
+  const validTimestamps = timestamps.filter((t) => now - t < windowMs);
+  if (validTimestamps.length >= maxSyncs) {
+    throw problem(429, 'Rate limit exceeded: maximum 10 manual syncs per minute. Please wait.');
+  }
+  validTimestamps.push(now);
+  userSyncHistory.set(userId, validTimestamps);
+}
+
+export function validateAlertSettings(body = {}, { isUpdate = false, userEmail = null, existing = null } = {}) {
+  const result = {};
+
+  // 1. Email validation
+  const rawEmail = body.email !== undefined ? body.email : body.alertEmail;
+  if (rawEmail !== undefined) {
+    if (rawEmail === null || rawEmail === '') {
+      result.alertEmail = null;
+    } else {
+      const email = clean(rawEmail);
+      if (email.length > 254 || !EMAIL.test(email)) {
+        throw problem(400, 'Provide a valid email address or null to disable alerts.');
+      }
+      result.alertEmail = email;
+    }
+  }
+
+  // 2. Strict boolean check for alertEnabled
+  if (body.alertEnabled !== undefined) {
+    if (typeof body.alertEnabled !== 'boolean') {
+      throw problem(400, 'alertEnabled must be a boolean (true or false).');
+    }
+    result.alertEnabled = body.alertEnabled;
+  }
+
+  // 3. Frequency validation
+  if (body.alertFrequency !== undefined && body.alertFrequency !== null) {
+    const freq = clean(body.alertFrequency);
+    const hours = parseFrequencyToHours(freq);
+    if (!hours || hours < 1) {
+      throw problem(400, 'alertFrequency must specify a valid interval (e.g. 1h, 3h, 1d, 2d, 3d, weekly, monthly, 14d).');
+    }
+    result.alertFrequency = freq;
+  }
+
+  // 4. Hour validation
+  if (body.alertHour !== undefined && body.alertHour !== null) {
+    const hour = Number(body.alertHour);
+    if (!Number.isInteger(hour) || !VALID_HOURS.includes(hour)) {
+      throw problem(400, 'alertHour must be between 12 PM (12) and 12 AM (0/23).');
+    }
+    result.alertHour = hour;
+  } else if (body.alertHour === null && isUpdate) {
+    result.alertHour = null;
+  }
+
+  // 5. Day validation
+  const freqToCheck = result.alertFrequency || existing?.alertFrequency || body.alertFrequency || '1d';
+  const isMonthly = ['monthly', '30d', '1m'].includes(String(freqToCheck).toLowerCase().trim());
+
+  if (body.alertDays !== undefined && body.alertDays !== null) {
+    const days = clean(body.alertDays);
+    const isMonthDay = /^(?:[1-9]|[12][0-9]|30)$/.test(days);
+    if (!VALID_DAYS.includes(days) && !isMonthDay) {
+      throw problem(400, 'alertDays must be weekdays or all, a specific day (mon-sun), or date of month (1-30).');
+    }
+    if (isMonthly && !isMonthDay) {
+      throw problem(400, 'Monthly schedule requires a specific date of month (1-30) for alertDays.');
+    }
+    result.alertDays = days;
+  } else if (isMonthly && !isUpdate) {
+    result.alertDays = '1';
+  }
+
+  // 6. Timezone validation (optional)
+  if (body.timezone !== undefined && body.timezone !== null) {
+    const tz = clean(body.timezone);
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: tz });
+      result.timezone = tz;
+    } catch {
+      throw problem(400, 'Provide a valid IANA timezone (e.g. Asia/Kolkata, America/New_York).');
+    }
+  }
+
+  // 7. Verify SMTP availability if alerts are enabled or email configured
+  const emailCandidate = result.alertEmail !== undefined ? result.alertEmail : (existing?.alertEmail ?? (result.alertEnabled ? userEmail : null));
+  const enabledCandidate = result.alertEnabled !== undefined ? result.alertEnabled : (existing?.alertEnabled ?? false);
+
+  if (result.alertEmail || (enabledCandidate && emailCandidate)) {
+    if (!isAlertConfigured()) {
+      throw problem(409, 'Email alerts are unavailable until SMTP is configured.');
+    }
+  }
+
+  return result;
+}
 
 export function createTopicsRouter(database = getDb) {
   const router = Router();
@@ -64,22 +170,23 @@ export function createTopicsRouter(database = getDb) {
       const count = await db().topic.count({ where: { userId: req.user.id } });
       if (count >= MAX_FREE_TOPICS) throw problem(403, `Free accounts can track up to ${MAX_FREE_TOPICS} topics. Upgrade for unlimited.`);
     }
-    const activeDb = db();
-    const alertEmail = req.body?.alertEmail || req.user?.email || null;
-    const alertEnabled = req.body?.alertEnabled !== undefined ? Boolean(req.body.alertEnabled) : Boolean(alertEmail);
-    const alertHour = req.body?.alertHour !== undefined ? Number(req.body.alertHour) : 12;
-    const alertDays = req.body?.alertDays || 'weekdays';
 
+    // Validate any alert settings passed on creation
+    const validatedAlerts = validateAlertSettings(req.body, { isUpdate: false, userEmail: req.user?.email });
+
+    const activeDb = db();
     const topic = await activeDb.topic.create({
       data: {
         name,
         query,
         category: category || null,
         userId: req.user.id,
-        alertEmail,
-        alertEnabled,
-        alertHour,
-        alertDays,
+        alertEmail: validatedAlerts.alertEmail !== undefined ? validatedAlerts.alertEmail : null,
+        alertEnabled: validatedAlerts.alertEnabled !== undefined ? validatedAlerts.alertEnabled : false,
+        alertHour: validatedAlerts.alertHour !== undefined ? validatedAlerts.alertHour : 12,
+        alertDays: validatedAlerts.alertDays !== undefined ? validatedAlerts.alertDays : 'weekdays',
+        alertFrequency: validatedAlerts.alertFrequency !== undefined ? validatedAlerts.alertFrequency : '3h',
+        timezone: validatedAlerts.timezone !== undefined ? validatedAlerts.timezone : 'Asia/Kolkata',
       },
     });
 
@@ -90,12 +197,12 @@ export function createTopicsRouter(database = getDb) {
         console.error(`Initial snapshot pull failed for topic ${topic.id}:`, err.message);
       });
 
-      // 2. Schedule 10-minute check & email
+      // 2. Schedule 10-minute check & email only if alerts are explicitly enabled
       const delay = Number(process.env.INITIAL_ALERT_DELAY_MS || 10 * 60 * 1000);
       setTimeout(async () => {
         try {
           const fresh = await activeDb.topic.findUnique({ where: { id: topic.id } });
-          if (fresh?.alertEmail && !fresh.lastAlertedAt) {
+          if (fresh && fresh.alertEmail && fresh.alertEnabled && !fresh.lastAlertedAt) {
             const syncResult = await syncTopic(fresh.id, activeDb);
             if (!syncResult.diff && isAlertConfigured()) {
               await alertService.sendInitialAlert(fresh, syncResult.snapshot);
@@ -119,6 +226,14 @@ export function createTopicsRouter(database = getDb) {
     if (!topic) throw problem(404, 'Topic not found.');
     if (topic.userId !== req.user.id) throw problem(403, 'You do not own this topic.');
 
+    // Concurrency control: reject if a sync is currently running for this topic
+    if (isTopicSyncing(topic.id)) {
+      throw problem(409, 'A sync is already in progress for this topic. Please wait.');
+    }
+
+    // Rate limiting: per-user frequency check
+    checkUserSyncRateLimit(req.user.id);
+
     const isMock = database !== getDb || typeof client.snapshot?.create !== 'function';
     if (isMock) {
       return res.json({
@@ -128,6 +243,20 @@ export function createTopicsRouter(database = getDb) {
         isBaseline: true,
         message: 'Mock sync complete.',
       });
+    }
+
+    // Cooldown check: minimum interval between pulls (default 60s)
+    const latestSnapshot = await client.snapshot.findFirst({
+      where: { topicId: topic.id },
+      orderBy: [{ pulledAt: 'desc' }, { id: 'desc' }],
+    });
+    const COOLDOWN_MS = Number(process.env.MANUAL_SYNC_COOLDOWN_MS || 60 * 1000);
+    if (latestSnapshot?.pulledAt) {
+      const elapsed = Date.now() - new Date(latestSnapshot.pulledAt).getTime();
+      if (elapsed < COOLDOWN_MS) {
+        const remainingSec = Math.ceil((COOLDOWN_MS - elapsed) / 1000);
+        throw problem(429, `Sync cooldown active. Please wait ${remainingSec}s before syncing again.`);
+      }
     }
 
     try {
@@ -142,6 +271,7 @@ export function createTopicsRouter(database = getDb) {
           : (result.diff ? 'New live changes detected and recorded!' : 'Checked Google Search & News. No changes since last snapshot.'),
       });
     } catch (err) {
+      if (err.status) throw err;
       throw problem(502, `Live sync failed: ${err.message}`);
     }
   }));
@@ -160,45 +290,23 @@ export function createTopicsRouter(database = getDb) {
   }));
 
   router.post('/:id/alert-settings', attempt(async (req, res) => {
-    const email = req.body?.email === null ? null : req.body?.email !== undefined ? clean(req.body.email) : undefined;
-    const alertEnabled = req.body?.alertEnabled;
-    const alertFrequency = req.body?.alertFrequency;
-    const alertHour = req.body?.alertHour;
-    const alertDays = req.body?.alertDays;
-    if (email && (email.length > 254 || !EMAIL.test(email))) throw problem(400, 'Provide a valid email address or null to disable alerts.');
-    if (email && !isAlertConfigured()) throw problem(409, 'Email alerts are unavailable until SMTP is configured.');
-    if (alertFrequency !== undefined) {
-      const days = parseFrequencyToDays(alertFrequency);
-      if (!days || days < 1 || days > 365) {
-        throw problem(400, 'alertFrequency must specify a valid interval (e.g. 1d, 2d, 3d, weekly, monthly, 14d).');
-      }
-    }
-    if (alertHour !== undefined && alertHour !== null) {
-      const hour = Number(alertHour);
-      const validHours = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0];
-      if (!validHours.includes(hour)) {
-        throw problem(400, 'alertHour must be between 12 PM (12) and 12 AM (0/23).');
-      }
-    }
-    const VALID_DAYS = ['weekdays', 'all', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-    const isMonthDay = /^(?:[1-9]|[12][0-9]|30)$/.test(String(alertDays).trim());
-    if (alertDays !== undefined && !VALID_DAYS.includes(alertDays) && !isMonthDay) {
-      throw problem(400, 'alertDays must be weekdays or all, a specific day (mon-sun), or date of month (1-30).');
-    }
     const client = db();
     const existing = await client.topic.findUnique({ where: { id: req.params.id } });
     if (!existing) throw problem(404, 'Topic not found.');
     if (existing.userId !== req.user.id) throw problem(403, 'You do not own this topic.');
+
+    const validated = validateAlertSettings(req.body, { isUpdate: true, userEmail: req.user?.email, existing });
     const data = {};
-    if (email !== undefined) {
-      data.alertEmail = email || null;
-    } else if (alertEnabled === true && !existing.alertEmail && req.user?.email) {
+    if (validated.alertEmail !== undefined) data.alertEmail = validated.alertEmail;
+    else if (validated.alertEnabled === true && !existing.alertEmail && req.user?.email) {
       data.alertEmail = req.user.email;
     }
-    if (typeof alertEnabled === 'boolean') data.alertEnabled = alertEnabled;
-    if (alertFrequency) data.alertFrequency = alertFrequency;
-    if (alertHour !== undefined) data.alertHour = alertHour === null ? null : Number(alertHour);
-    if (alertDays) data.alertDays = alertDays;
+    if (validated.alertEnabled !== undefined) data.alertEnabled = validated.alertEnabled;
+    if (validated.alertFrequency !== undefined) data.alertFrequency = validated.alertFrequency;
+    if (validated.alertHour !== undefined) data.alertHour = validated.alertHour;
+    if (validated.alertDays !== undefined) data.alertDays = validated.alertDays;
+    if (validated.timezone !== undefined) data.timezone = validated.timezone;
+
     if (Object.keys(data).length === 0) throw problem(400, 'Provide at least one setting to update.');
     const topic = await client.topic.update({ where: { id: req.params.id }, data });
     res.json({ topic });
