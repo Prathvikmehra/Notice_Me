@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [searching, setSearching] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -110,86 +111,138 @@ export default function Dashboard() {
   const selected = topics.find((topic) => topic.id === selectedId);
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand" style={{ padding: '0 4px' }}>
-          <Logo />
+      {sidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close navigation menu"
+        />
+      )}
+      <aside className={`sidebar ${sidebarOpen ? 'is-open' : ''}`}>
+        <div className="sidebar-mobile-header">
+          <div className="brand" style={{ padding: '0 4px' }}>
+            <Logo />
+          </div>
+          <button
+            type="button"
+            className="sidebar-close-btn"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close navigation"
+          >
+            ✕
+          </button>
         </div>
         <div className="sidebar-intro"><span className="live-dot" /> Live SerpApi monitoring</div>
-        <button
-          type="button"
-          className={`sidebar-trending-btn ${viewMode === 'trending' ? 'is-active' : ''}`}
-          onClick={() => { setViewMode('trending'); setSelectedId(null); }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>🔥</span>
-            <span>Trending Radar</span>
-          </div>
-          <span className="nav-tab-badge">LIVE</span>
-        </button>
+        <div className="sidebar-nav">
+          <button
+            type="button"
+            className={`sidebar-nav-tab ${viewMode === 'watchlist' ? 'is-active' : ''}`}
+            onClick={() => {
+              setViewMode('watchlist');
+              if (!selectedId && topics.length > 0) setSelectedId(topics[0].id);
+              setSidebarOpen(false);
+            }}
+          >
+            <div className="sidebar-nav-label">
+              <span className="sidebar-nav-icon">📑</span>
+              <span>My Watchlist</span>
+            </div>
+            <span className="sidebar-nav-count">{topics.length}</span>
+          </button>
+          <button
+            type="button"
+            className={`sidebar-nav-tab ${viewMode === 'trending' ? 'is-active' : ''}`}
+            onClick={() => {
+              setViewMode('trending');
+              setSelectedId(null);
+              setSidebarOpen(false);
+            }}
+          >
+            <div className="sidebar-nav-label">
+              <span className="sidebar-nav-icon">🔥</span>
+              <span>Trending Radar</span>
+            </div>
+            <span className="sidebar-nav-badge">HOT</span>
+          </button>
+        </div>
         <TopicList
           topics={topics}
           selectedId={viewMode === 'watchlist' ? selectedId : null}
-          onSelect={(id) => { setSelectedId(id); setViewMode('watchlist'); }}
+          onSelect={(id) => {
+            setSelectedId(id);
+            setViewMode('watchlist');
+            setSidebarOpen(false);
+          }}
         />
-        <TopicForm onCreate={add} />
+        <TopicForm onCreate={async (fields) => {
+          await add(fields);
+          setSidebarOpen(false);
+        }} />
         <div className="sidebar-foot">Live Google Search + News<br />Hourly schedule active</div>
       </aside>
       <main className="main-panel">
         <header className="topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-            <span className="topbar-title">Notice Board</span>
-            <div className="nav-tab-group">
-              <button
-                type="button"
-                className={`nav-tab-btn ${viewMode === 'watchlist' ? 'is-active' : ''}`}
-                onClick={() => {
-                  setViewMode('watchlist');
-                  if (!selectedId && topics.length > 0) setSelectedId(topics[0].id);
-                }}
-              >
-                📑 My Watchlist ({topics.length})
-              </button>
-              <button
-                type="button"
-                className={`nav-tab-btn ${viewMode === 'trending' ? 'is-active' : ''}`}
-                onClick={() => { setViewMode('trending'); }}
-              >
-                🔥 Trending Radar <span className="nav-tab-badge">HOT</span>
-              </button>
-            </div>
+          <div className="topbar-left">
+            <button
+              type="button"
+              className="mobile-menu-btn"
+              onClick={() => setSidebarOpen((prev) => !prev)}
+              aria-label="Toggle navigation drawer"
+              title="Toggle navigation"
+            >
+              ☰
+            </button>
+            <span className="topbar-badge">NOTICE BOARD</span>
+            <span className="topbar-divider">/</span>
+            <span className="topbar-active-view">
+              {viewMode === 'trending' ? '🔥 Trending Radar' : (selected ? selected.name : 'Watchlist Overview')}
+            </span>
           </div>
           <div className="topbar-search">
+            <span className="topbar-search-icon" aria-hidden="true">🔍</span>
             <input
-              type="search"
-              placeholder="Search topics & diffs..."
+              type="text"
+              placeholder="Search topics, circulars, diffs..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setQuery(''); }}
+              aria-label="Search topics and circulars"
             />
-            {query && (
+            {query ? (
               <button
                 type="button"
                 className="search-clear-btn"
                 onClick={() => setQuery('')}
                 title="Clear search"
+                aria-label="Clear search"
               >
                 ✕
               </button>
+            ) : (
+              <span className="search-kbd-hint">ESC</span>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-            <div className="user-profile-badge">
+          <div className="topbar-right">
+            <div className="user-profile-badge" title={user?.email}>
               <span className="user-avatar">{user?.email?.[0]?.toUpperCase() || 'U'}</span>
-              <span>{user?.email}</span>
+              <span className="user-email-text">{user?.email}</span>
             </div>
-            <button type="button" className="button button-quiet" onClick={() => setRevision((value) => value + 1)}>↻ Refresh</button>
-            <button type="button" className="button button-quiet" onClick={signOut}>Sign out</button>
+            <button type="button" className="button button-quiet topbar-btn" onClick={() => setRevision((value) => value + 1)} title="Refresh data">↻ Refresh</button>
+            <button type="button" className="button button-quiet topbar-btn" onClick={signOut} title="Sign out">Sign out</button>
           </div>
         </header>
         {error && <p className="form-error page-error" role="alert">{error}</p>}
         {query.trim().length >= 2 ? (
           <div className="search-results-panel">
-            <div className="section-label" style={{ marginBottom: '8px' }}>SEARCH RESULTS</div>
-            <h2>Results for “{query.trim()}”</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div>
+                <div className="section-label">SEARCH RESULTS</div>
+                <h2 style={{ margin: '4px 0 0' }}>Results for “{query.trim()}”</h2>
+              </div>
+              <button type="button" className="button button-quiet" onClick={() => setQuery('')}>
+                ✕ Close Search
+              </button>
+            </div>
             {searching ? (
               <div className="empty-state" style={{ marginTop: '20px' }}>Searching topics & update history…</div>
             ) : (!searchResults?.topics?.length && !searchResults?.diffs?.length) ? (
