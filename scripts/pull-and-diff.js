@@ -4,37 +4,15 @@ import { createSerpApiClient } from './serpapi-client.js';
 import { diff } from './diff-engine.js';
 import * as alertService from '../backend/src/services/alertService.js';
 
-export const FREQUENCIES = {
-  '1h': 60 * 60 * 1000,
-  '3h': 3 * 60 * 60 * 1000,
-  '1d': 24 * 60 * 60 * 1000,
-  '2d': 2 * 24 * 60 * 60 * 1000,
-  '3d': 3 * 24 * 60 * 60 * 1000,
-  '5d': 5 * 24 * 60 * 60 * 1000,
-  '7d': 7 * 24 * 60 * 60 * 1000,
-  '14d': 14 * 24 * 60 * 60 * 1000,
-  '30d': 30 * 24 * 60 * 60 * 1000,
-};
+import { FREQUENCIES, parseFrequencyToMs as canonicalParseFrequencyToMs } from './frequency.js';
+
+export { FREQUENCIES };
 
 export function parseFrequencyToMs(freqStr) {
-  if (!freqStr) return 24 * 60 * 60 * 1000;
-  const str = String(freqStr).trim().toLowerCase();
-  if (FREQUENCIES[str]) return FREQUENCIES[str];
-  if (['daily', '1d'].includes(str)) return 24 * 60 * 60 * 1000;
-  if (['weekly', '7d', '1w'].includes(str)) return 7 * 24 * 60 * 60 * 1000;
-  if (['biweekly', 'bi-weekly', '14d', '2w'].includes(str)) return 14 * 24 * 60 * 60 * 1000;
-  if (['monthly', '30d', '1m'].includes(str)) return 30 * 24 * 60 * 60 * 1000;
-  const match = str.match(/^(\d+)\s*(h|hours?|d|days?|w|weeks?|m|months?)?$/i);
-  if (match) {
-    const val = parseInt(match[1], 10);
-    const unit = (match[2] || 'd').charAt(0).toLowerCase();
-    if (unit === 'h') return Math.max(1, val) * 60 * 60 * 1000;
-    if (unit === 'd') return Math.max(1, val) * 24 * 60 * 60 * 1000;
-    if (unit === 'w') return Math.max(1, val) * 7 * 24 * 60 * 60 * 1000;
-    if (unit === 'm') return Math.max(1, val) * 30 * 24 * 60 * 60 * 1000;
-  }
-  return 24 * 60 * 60 * 1000;
+  const ms = canonicalParseFrequencyToMs(freqStr);
+  return ms !== null ? ms : 24 * 60 * 60 * 1000;
 }
+
 
 function isAlertDue(topic) {
   if (!topic?.alertEmail) return false;

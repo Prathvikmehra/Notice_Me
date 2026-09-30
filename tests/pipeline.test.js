@@ -16,6 +16,7 @@ async function runner(alert, compare) {
   const module = new vm.SourceTextModule(await readFile(`${root}/scripts/pull-and-diff.js`, 'utf8'), { context, identifier: pathToFileURL(`${root}/scripts/pull-and-diff.js`).href });
   await module.link(async (specifier) => {
     if (specifier === './diff-engine.js' && !compare) return new vm.SourceTextModule(await readFile(`${root}/scripts/diff-engine.js`, 'utf8'), { context });
+    if (specifier === './frequency.js' || specifier.endsWith('/frequency.js')) return new vm.SourceTextModule(await readFile(`${root}/scripts/frequency.js`, 'utf8'), { context });
     const exports = specifier === 'node:url' ? { pathToFileURL } : specifier.includes('serpapi-client') ? { createSerpApiClient } : specifier.includes('diff-engine') ? { diff: compare } : alert ? { sendDiffAlert: alert, isAlertConfigured: () => true } : {};
     return new vm.SyntheticModule(Object.keys(exports), function () { for (const [key, value] of Object.entries(exports)) this.setExport(key, value); }, { context });
   });

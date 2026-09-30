@@ -173,6 +173,13 @@ test('Canonical frequency parser computes hours, ms, days, and labels consistent
   assert.equal(getFrequencyLabel('1d'), 'daily');
   assert.equal(getFrequencyLabel('7d'), 'weekly');
   assert.equal(getFrequencyLabel('monthly'), 'monthly');
+
+  // Verify scripts/pull-and-diff.js uses unified frequency parser
+  const pullAndDiff = await import('../scripts/pull-and-diff.js');
+  assert.equal(pullAndDiff.parseFrequencyToMs('1h'), 3600000);
+  assert.equal(pullAndDiff.parseFrequencyToMs('3h'), 10800000);
+  assert.equal(pullAndDiff.parseFrequencyToMs('1d'), 86400000);
+  assert.equal(pullAndDiff.FREQUENCIES['3h'], 3 * 3600 * 1000);
 });
 
 test('Scheduler health status returns alive state and heartbeat properties', async () => {

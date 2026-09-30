@@ -16,6 +16,8 @@
     "frontend": "npm --workspace=frontend run dev",
     "prisma:generate": "prisma generate --schema=backend/prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema=backend/prisma/schema.prisma",
+    "pull-and-diff": "node scripts/pull-and-diff.js",
+    "ingest": "node scripts/pull-and-diff.js",
     "test": "node --experimental-vm-modules --test tests/*.test.js"
   },
   "dependencies": {
