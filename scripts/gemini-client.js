@@ -141,6 +141,8 @@ ${JSON.stringify(newsItems, null, 2)}
 Synthesize this data into a JSON object with this exact structure:
 {
   "coreStatus": "Clear, objective 2-sentence executive summary of the current verified situation.",
+  "urgency": "CRITICAL" | "MODERATE" | "ROUTINE",
+  "volatilityScore": 85,
   "keyPoints": [
     { "badge": "SHORT_BADGE", "text": "High-impact takeaway or finding" }
   ],
@@ -151,6 +153,8 @@ Synthesize this data into a JSON object with this exact structure:
 }
 
 Rules:
+- Urgency: "CRITICAL" if imminent deadline (<7 days), postponement, cancellation, legal stay, or urgent action needed. "MODERATE" if new release, admit card, or active development. "ROUTINE" for standard periodic updates.
+- VolatilityScore: Integer from 1 to 100 representing how dynamic or fast-moving the recent updates are.
 - If a deadline or date is explicitly mentioned in search/news, extract it into the deadlines array.
 - Badges should be short (1-2 words), e.g., "ADMIT CARD", "ELIGIBILITY", "DEADLINE", "VERIFIED", "RELEASED".
 - Do not make up facts not present in the sources.
@@ -170,8 +174,19 @@ Rules:
     try {
       const parsed = JSON.parse(rawJson);
       if (typeof parsed?.coreStatus === 'string') {
+        let urgency = typeof parsed.urgency === 'string' ? parsed.urgency.toUpperCase().trim() : null;
+        if (!['CRITICAL', 'MODERATE', 'ROUTINE'].includes(urgency)) {
+          const hasHighDeadline = Array.isArray(parsed.deadlines) && parsed.deadlines.some((d) => d.urgency === 'HIGH');
+          urgency = hasHighDeadline ? 'CRITICAL' : 'MODERATE';
+        }
+        const volatilityScore = typeof parsed.volatilityScore === 'number'
+          ? Math.min(100, Math.max(1, Math.round(parsed.volatilityScore)))
+          : (urgency === 'CRITICAL' ? 85 : urgency === 'MODERATE' ? 55 : 25);
+
         return {
           coreStatus: parsed.coreStatus.trim(),
+          urgency,
+          volatilityScore,
           keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints.slice(0, 4) : [],
           deadlines: Array.isArray(parsed.deadlines) ? parsed.deadlines.slice(0, 3) : [],
           actionRequired: parsed.actionRequired ? String(parsed.actionRequired).trim() : null,

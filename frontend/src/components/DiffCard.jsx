@@ -46,16 +46,34 @@ function renderDiffLine(line, index) {
   return <div key={index} className="diff-line">{line}</div>;
 }
 
+function getDiffUrgency(summary) {
+  const text = (summary || '').toLowerCase();
+  if (/deadline|last date|cancel|postpone|stay order|court order|cutoff|hall ticket|admit card|urgent|scheduled|verdict/i.test(text)) {
+    return { label: 'CRITICAL SHIFT', level: 'critical', score: 88 };
+  }
+  if (/extend|release|announced|update|fee|apply|eligibility|new result|decision|notification/i.test(text)) {
+    return { label: 'MODERATE UPDATE', level: 'moderate', score: 58 };
+  }
+  return { label: 'ROUTINE NOTICE', level: 'routine', score: 28 };
+}
+
 export default function DiffCard({ change }) {
   const date = new Date(change.detectedAt);
   const lines = (change.summary || '').split('\n').filter(Boolean);
+  const urgency = getDiffUrgency(change.summary);
 
   return (
     <article className="diff-card">
       <div className="diff-topline">
-        <time dateTime={change.detectedAt}>
-          {Number.isNaN(date.getTime()) ? 'Unknown date' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-        </time>
+        <div className="diff-topline-left">
+          <time dateTime={change.detectedAt}>
+            {Number.isNaN(date.getTime()) ? 'Unknown date' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </time>
+          <span className={`diff-urgency-pill urgency-${urgency.level}`}>
+            <span className="urgency-beacon" />
+            {urgency.label} • {urgency.score}%
+          </span>
+        </div>
         <span className="change-badge">Material change detected</span>
       </div>
       <div className="diff-summary">

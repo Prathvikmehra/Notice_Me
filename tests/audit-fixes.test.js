@@ -101,3 +101,43 @@ test('runWithConcurrency limits peak active operations to configured concurrency
   assert.deepEqual(results, [2, 4, 6, 8, 10, 12, 14, 16]);
   assert.ok(peakActive <= 3, `Peak active concurrency was ${peakActive}, expected <= 3`);
 });
+
+test('Gemini client generates and validates urgency classification and volatility score', async () => {
+  const mockFetch = async () => ({
+    status: 200,
+    ok: true,
+    json: async () => ({
+      candidates: [{
+        content: {
+          parts: [{
+            text: JSON.stringify({
+              coreStatus: 'Urgent stay order issued by Supreme Court.',
+              urgency: 'CRITICAL',
+              volatilityScore: 92,
+              keyPoints: [{ badge: 'ORDER', text: 'Exam postponed indefinitely' }],
+              deadlines: [{ title: 'Revised schedule', date: 'TBD', urgency: 'HIGH' }],
+              actionRequired: 'Awaited official notification before booking travel.',
+            }),
+          }],
+        },
+      }],
+    }),
+  });
+
+  const client = createGeminiClient({
+    keys: ['key-test'],
+    fetchImpl: mockFetch,
+    logger: { warn: () => {} },
+  });
+
+  const topic = { name: 'NEET PG 2026', query: 'neet pg 2026 hearing' };
+  const briefing = await client.generateBriefing(topic, {
+    search: [{ title: 'NEET PG Hearing', link: 'https://sc.gov.in' }],
+    news: [],
+  });
+
+  assert.equal(briefing.urgency, 'CRITICAL');
+  assert.equal(briefing.volatilityScore, 92);
+  assert.equal(briefing.coreStatus, 'Urgent stay order issued by Supreme Court.');
+  assert.equal(briefing.deadlines[0].urgency, 'HIGH');
+});
