@@ -37,4 +37,5 @@ export const updateAlertSettings = async (id, settings) => (await request(`/api/
 export const syncTopic = (id) => request(`/api/topics/${encodeURIComponent(id)}/sync`, { method: 'POST' });
 export const searchTopics = async (q) => request(`/api/topics/search?q=${encodeURIComponent(q)}`);
 export const getProfile = async () => (await request('/api/user/me'));
+export const upgradePlan = async (plan = 'pro') => (await request('/api/user/upgrade', { method: 'POST', body: JSON.stringify({ plan }) }));
 export const getTrendingTopics = async () => (await request('/api/topics/trending')).trending;

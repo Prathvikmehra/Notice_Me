@@ -141,3 +141,82 @@ test('Gemini client generates and validates urgency classification and volatilit
   assert.equal(briefing.coreStatus, 'Urgent stay order issued by Supreme Court.');
   assert.equal(briefing.deadlines[0].urgency, 'HIGH');
 });
+
+test('Canonical frequency parser computes hours, ms, days, and labels consistently', async () => {
+  const {
+    parseFrequencyToHours,
+    parseFrequencyToMs,
+    parseFrequencyToDays,
+    getFrequencyLabel,
+  } = await import('../scripts/frequency.js');
+
+  assert.equal(parseFrequencyToHours('1h'), 1);
+  assert.equal(parseFrequencyToHours('3h'), 3);
+  assert.equal(parseFrequencyToHours('1d'), 24);
+  assert.equal(parseFrequencyToHours('daily'), 24);
+  assert.equal(parseFrequencyToHours('weekly'), 168);
+  assert.equal(parseFrequencyToHours('biweekly'), 336);
+  assert.equal(parseFrequencyToHours('monthly'), 720);
+  assert.equal(parseFrequencyToHours('invalid-str'), null);
+
+  assert.equal(parseFrequencyToMs('1h'), 3600000);
+  assert.equal(parseFrequencyToMs('3h'), 10800000);
+  assert.equal(parseFrequencyToMs('1d'), 86400000);
+  assert.equal(parseFrequencyToMs('invalid-str'), null);
+
+  assert.equal(parseFrequencyToDays('1h'), 1);
+  assert.equal(parseFrequencyToDays('7d'), 7);
+  assert.equal(parseFrequencyToDays('weekly'), 7);
+  assert.equal(parseFrequencyToDays('invalid-str'), null);
+
+  assert.equal(getFrequencyLabel('1h'), 'every hour');
+  assert.equal(getFrequencyLabel('1d'), 'daily');
+  assert.equal(getFrequencyLabel('7d'), 'weekly');
+  assert.equal(getFrequencyLabel('monthly'), 'monthly');
+});
+
+test('Scheduler health status returns alive state and heartbeat properties', async () => {
+  const { getSchedulerStatus } = await import('../backend/src/services/cronService.js');
+  const status = getSchedulerStatus();
+  assert.equal(typeof status, 'object');
+  assert.ok('running' in status);
+  assert.ok('tasks' in status);
+  assert.equal(status.tasks.dispatch, '0 * * * *');
+  assert.equal(status.tasks.prefetch, '50 * * * *');
+});
+
+test('User router upgrade endpoint switches user between free and pro plans', async () => {
+  const { createUserRouter } = await import('../backend/src/routes/user.js');
+  let currentPlan = 'free';
+  const mockDb = {
+    topic: { count: async () => 2 },
+    user: {
+      update: async ({ data }) => {
+        currentPlan = data.plan;
+        return { id: 'user-1', email: 'test@example.com', plan: data.plan };
+      },
+    },
+  };
+
+  const router = createUserRouter(() => mockDb);
+  const req = {
+    user: { id: 'user-1', email: 'test@example.com', plan: 'free' },
+    body: { plan: 'pro' },
+    headers: { authorization: 'Bearer mock-token' },
+  };
+
+  let responseData = null;
+  const res = {
+    json: (data) => { responseData = data; return res; },
+    status: () => res,
+  };
+
+  // Find the POST /upgrade route layer
+  const upgradeLayer = router.stack.find((l) => l.route?.path === '/upgrade' && l.route?.methods?.post);
+  assert.ok(upgradeLayer, 'POST /upgrade route must exist');
+
+  await upgradeLayer.route.stack[0].handle(req, res, () => {});
+  assert.equal(responseData.user.plan, 'pro');
+  assert.equal(currentPlan, 'pro');
+  assert.ok(responseData.message.includes('Pro tier'));
+});

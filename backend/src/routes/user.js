@@ -25,6 +25,21 @@ export function createUserRouter(database = getDb) {
     res.json({ user });
   }));
 
+  router.post('/upgrade', attempt(async (req, res) => {
+    const targetPlan = req.body?.plan === 'free' ? 'free' : 'pro';
+    const user = await db().user.update({
+      where: { id: req.user.id },
+      data: { plan: targetPlan },
+    });
+    if (req.user) req.user.plan = targetPlan;
+    res.json({
+      user,
+      message: targetPlan === 'pro'
+        ? 'Account upgraded to Pro tier. Unlimited topics unlocked!'
+        : 'Account set to Free tier.',
+    });
+  }));
+
   return router;
 }
 

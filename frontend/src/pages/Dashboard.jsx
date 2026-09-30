@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { createTopic, deleteTopic, listTopics, searchTopics, getTrendingTopics } from '../api/client.js';
+import { createTopic, deleteTopic, listTopics, searchTopics, getTrendingTopics, upgradePlan } from '../api/client.js';
 import { findTopicBySlugOrId, getTopicSlug } from '../utils/slug.js';
 import TopicForm from '../components/TopicForm.jsx';
 import TopicList from '../components/TopicList.jsx';
@@ -109,6 +109,24 @@ export default function Dashboard() {
     } catch (cause) { setError(cause.message); }
   }
 
+  const [userPlan, setUserPlan] = useState(user?.plan || 'free');
+
+  useEffect(() => {
+    if (user?.plan) setUserPlan(user.plan);
+  }, [user?.plan]);
+
+  async function handleUpgradePlan() {
+    try {
+      const nextPlan = userPlan === 'pro' ? 'free' : 'pro';
+      const res = await upgradePlan(nextPlan);
+      setUserPlan(nextPlan);
+      if (user) user.plan = nextPlan;
+      setRevision((r) => r + 1);
+    } catch (err) {
+      alert(`Plan update failed: ${err.message}`);
+    }
+  }
+
   const selected = topics.find((topic) => topic.id === selectedId);
   return (
     <div className="app-shell">
@@ -169,6 +187,8 @@ export default function Dashboard() {
         <TopicList
           topics={topics}
           selectedId={viewMode === 'watchlist' ? selectedId : null}
+          user={{ ...user, plan: userPlan }}
+          onUpgradePlan={handleUpgradePlan}
           onSelect={(id) => {
             setSelectedId(id);
             setViewMode('watchlist');
@@ -224,6 +244,14 @@ export default function Dashboard() {
             )}
           </div>
           <div className="topbar-right">
+            <button
+              type="button"
+              className={`plan-toggle-pill ${userPlan === 'pro' ? 'is-pro' : 'is-free'}`}
+              onClick={handleUpgradePlan}
+              title={userPlan === 'pro' ? 'Pro plan active (unlimited topics). Click to switch to Free.' : 'Free plan (max 5 topics). Click to upgrade to Pro.'}
+            >
+              {userPlan === 'pro' ? '★ PRO' : '⚡ UPGRADE'}
+            </button>
             <div className="user-profile-badge" title={user?.email}>
               <span className="user-avatar">{user?.email?.[0]?.toUpperCase() || 'U'}</span>
               <span className="user-email-text">{user?.email}</span>
