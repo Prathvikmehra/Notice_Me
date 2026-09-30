@@ -29,7 +29,7 @@ export function createGeminiClient({
   env = process.env,
   fetchImpl = fetch,
   logger = console,
-  model = 'gemini-2.5-flash',
+  model = env.GEMINI_MODEL || 'gemini-3.5-flash',
 } = {}) {
   const keyPool = (keys || parseGeminiKeys(env)).map((key, index) => ({ key, index: index + 1, cooldownUntil: 0 }));
   let keyOffset = 0;
