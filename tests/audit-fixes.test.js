@@ -324,3 +324,60 @@ test('SerpApi Google Trends dynamically generates and refreshes trending public 
   assert.equal(cached[0].officialSource, 'nmc.org.in');
 });
 
+test('sendAlertConfirmationEmail sends activation confirmation with topic and interval details', async () => {
+  const { sendAlertConfirmationEmail } = await import('../backend/src/services/alertService.js');
+
+  const env = {
+    SMTP_HOST: 'smtp.example.org',
+    SMTP_PORT: '587',
+    SMTP_USER: 'demo',
+    SMTP_PASS: 'secret',
+    ALERT_FROM: 'Notice Me <alerts@example.org>',
+  };
+
+  const topic1 = {
+    name: 'UPSC CSE 2026',
+    query: 'upsc cse 2026 prelims notification',
+    alertEmail: 'aspirant@example.com',
+    alertFrequency: '3h',
+    alertEnabled: true,
+  };
+
+  let sentMails = [];
+  const createTransport = () => ({
+    sendMail: async (mail) => {
+      sentMails.push(mail);
+      return { accepted: [mail.to], rejected: [] };
+    },
+  });
+
+  const res1 = await sendAlertConfirmationEmail(topic1, { env, createTransport });
+  assert.equal(res1, true);
+  assert.equal(sentMails.length, 1);
+  assert.equal(sentMails[0].to, 'aspirant@example.com');
+  assert.match(sentMails[0].subject, /Email Alerts Activated for “UPSC CSE 2026”/);
+  assert.match(sentMails[0].text, /EVERY 3 HOURS/);
+  assert.match(sentMails[0].text, /upsc cse 2026 prelims notification/);
+
+  // Daily scheduled topic with specific hour and days
+  const topic2 = {
+    name: 'PM-KISAN Scheme',
+    query: 'pm kisan installment date',
+    alertEmail: 'farmer@example.com',
+    alertFrequency: '1d',
+    alertHour: 16,
+    alertDays: 'weekdays',
+    timezone: 'Asia/Kolkata',
+    alertEnabled: true,
+  };
+
+  const res2 = await sendAlertConfirmationEmail(topic2, { env, createTransport });
+  assert.equal(res2, true);
+  assert.equal(sentMails.length, 2);
+  assert.equal(sentMails[1].to, 'farmer@example.com');
+  assert.match(sentMails[1].subject, /Email Alerts Activated for “PM-KISAN Scheme”/);
+  assert.match(sentMails[1].text, /DAILY at 4:00 PM/);
+  assert.match(sentMails[1].text, /Weekdays \(Monday through Friday\)/);
+  assert.match(sentMails[1].text, /Asia\/Kolkata/);
+});
+

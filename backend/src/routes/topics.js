@@ -250,6 +250,13 @@ export function createTopicsRouter(database = getDb) {
         console.error(`Initial snapshot pull failed for topic ${topic.id}:`, err.message);
       });
 
+      // Send immediate confirmation email if created with alerts enabled
+      if (topic.alertEnabled && topic.alertEmail && alertService.isAlertConfigured()) {
+        alertService.sendAlertConfirmationEmail(topic).catch((err) => {
+          console.warn(`[Alert] Confirmation email failed for topic "${topic.name}":`, err.message);
+        });
+      }
+
       // 2. Schedule 10-minute check & email only if alerts are explicitly enabled
       const delay = Number(process.env.INITIAL_ALERT_DELAY_MS || 10 * 60 * 1000);
       setTimeout(async () => {
@@ -362,6 +369,15 @@ export function createTopicsRouter(database = getDb) {
 
     if (Object.keys(data).length === 0) throw problem(400, 'Provide at least one setting to update.');
     const topic = await client.topic.update({ where: { id: req.params.id }, data });
+
+    // Send confirmation email whenever alerts are saved as enabled
+    if (topic.alertEnabled && topic.alertEmail && alertService.isAlertConfigured()) {
+      console.log(`[Alert] Sending activation confirmation email to ${topic.alertEmail} for "${topic.name}"...`);
+      alertService.sendAlertConfirmationEmail(topic)
+        .then(() => console.log(`[Alert] Successfully delivered confirmation email to ${topic.alertEmail} for "${topic.name}".`))
+        .catch((err) => console.warn(`[Alert] Confirmation email failed for topic "${topic.name}":`, err.message));
+    }
+
     res.json({ topic });
   }));
 
