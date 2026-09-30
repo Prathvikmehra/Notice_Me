@@ -8,6 +8,7 @@ import DiffCard from '../components/DiffCard.jsx';
 import Logo from '../components/Logo.jsx';
 import TopicDetail from './TopicDetail.jsx';
 import TrendingFeed from '../components/TrendingFeed.jsx';
+import ProModal from '../components/ProModal.jsx';
 
 export default function Dashboard() {
   const { signOut, user } = useAuth();
@@ -22,6 +23,7 @@ export default function Dashboard() {
   const [searchResults, setSearchResults] = useState(null);
   const [searching, setSearching] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showProModal, setShowProModal] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -115,16 +117,8 @@ export default function Dashboard() {
     if (user?.plan) setUserPlan(user.plan);
   }, [user?.plan]);
 
-  async function handleUpgradePlan() {
-    try {
-      const nextPlan = userPlan === 'pro' ? 'free' : 'pro';
-      const res = await upgradePlan(nextPlan);
-      setUserPlan(nextPlan);
-      if (user) user.plan = nextPlan;
-      setRevision((r) => r + 1);
-    } catch (err) {
-      alert(`Plan update failed: ${err.message}`);
-    }
+  function handleUpgradePlan() {
+    setShowProModal(true);
   }
 
   const selected = topics.find((topic) => topic.id === selectedId);
@@ -247,10 +241,10 @@ export default function Dashboard() {
             <button
               type="button"
               className={`plan-toggle-pill ${userPlan === 'pro' ? 'is-pro' : 'is-free'}`}
-              onClick={handleUpgradePlan}
-              title={userPlan === 'pro' ? 'Pro plan active (unlimited topics). Click to switch to Free.' : 'Free plan (max 5 topics). Click to upgrade to Pro.'}
+              onClick={() => setShowProModal(true)}
+              title="Pro features coming soon"
             >
-              {userPlan === 'pro' ? '★ PRO' : '⚡ UPGRADE'}
+              {userPlan === 'pro' ? '★ PRO' : '⚡ UPGRADE (SOON)'}
             </button>
             <div className="user-profile-badge" title={user?.email}>
               <span className="user-avatar">{user?.email?.[0]?.toUpperCase() || 'U'}</span>
@@ -343,6 +337,7 @@ export default function Dashboard() {
           />
         )}
       </main>
+      <ProModal isOpen={showProModal} onClose={() => setShowProModal(false)} />
     </div>
   );
 }

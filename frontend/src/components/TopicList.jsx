@@ -18,7 +18,7 @@ export default function TopicList({ topics, selectedId, onSelect, user, onUpgrad
             style={{ width: '100%', fontSize: '11px', padding: '6px', minHeight: '30px' }}
             onClick={onUpgradePlan}
           >
-            ⚡ Unlock Pro (Unlimited Topics)
+            ⚡ Unlock Pro (Coming Soon)
           </button>
         </div>
       )}
