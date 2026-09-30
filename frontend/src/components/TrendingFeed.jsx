@@ -120,6 +120,7 @@ export default function TrendingFeed({ trending = [], userTopics = [], onTrack, 
           const tracked = isTracking(item);
           const existing = getExistingTopic(item);
           const isBusy = trackingId === item.id;
+          const followerCount = Math.max(item.followers || 0, tracked ? 1 : 0);
 
           return (
             <article key={item.id} className="trending-card">
@@ -130,8 +131,8 @@ export default function TrendingFeed({ trending = [], userTopics = [], onTrack, 
                   </span>
                   <span className="trending-badge-tag">{item.badge}</span>
                 </div>
-                <span className="trending-followers-tag" title="Followers monitoring this notice">
-                  👥 {item.followers.toLocaleString()} tracking
+                <span className="trending-followers-tag" title="Users tracking this notice">
+                  👥 {followerCount.toLocaleString()} tracking
                 </span>
               </div>
 

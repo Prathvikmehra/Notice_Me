@@ -133,7 +133,32 @@ export function createTopicsRouter(database = getDb) {
 
   // Public endpoint for trending tracks (accessible without auth)
   router.get('/trending', attempt(async (req, res) => {
-    res.json({ trending: getCachedTrending() });
+    const trending = getCachedTrending();
+    try {
+      const client = db();
+      if (client?.topic?.findMany) {
+        const dbTopics = await client.topic.findMany({
+          select: { name: true, query: true },
+        });
+        const enriched = trending.map((item) => {
+          const itemQ = (item.query || '').toLowerCase().trim();
+          const itemName = (item.name || '').toLowerCase().trim();
+          const count = dbTopics.filter((t) => {
+            const tQ = (t.query || '').toLowerCase().trim();
+            const tName = (t.name || '').toLowerCase().trim();
+            return (tQ && tQ === itemQ) || (tName && tName === itemName);
+          }).length;
+          return {
+            ...item,
+            followers: count,
+          };
+        });
+        return res.json({ trending: enriched });
+      }
+    } catch {
+      // Fallback to cached default
+    }
+    res.json({ trending });
   }));
 
   router.use(requireAuth);

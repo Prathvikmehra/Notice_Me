@@ -96,6 +96,7 @@ export default function Dashboard() {
     setTopics((items) => [topic, ...items]);
     setSelectedId(topic.id);
     setViewMode('watchlist');
+    setRevision((r) => r + 1);
     setError('');
   }
 
@@ -107,6 +108,7 @@ export default function Dashboard() {
       setTopics(remaining);
       setSelectedId(remaining[0]?.id || null);
       if (remaining.length === 0) setViewMode('trending');
+      setRevision((r) => r + 1);
       setError('');
     } catch (cause) { setError(cause.message); }
   }
