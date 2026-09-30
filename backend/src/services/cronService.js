@@ -59,51 +59,19 @@ export function getCalendarDaysDiff(date1, date2, timeZone = 'Asia/Kolkata') {
   }
 }
 
-export function parseFrequencyToHours(freqStr) {
-  if (!freqStr) return 24;
-  const str = String(freqStr).trim().toLowerCase();
-  if (str === '1h') return 1;
-  if (str === '3h') return 3;
-  if (['daily', '1d'].includes(str)) return 24;
-  if (['weekly', '7d', '1w'].includes(str)) return 168;
-  if (['biweekly', 'bi-weekly', '14d', '2w'].includes(str)) return 336;
-  if (['monthly', '30d', '1m'].includes(str)) return 720;
-  const match = str.match(/^(\d+)\s*(h|hours?|d|days?|w|weeks?|m|months?)?$/i);
-  if (match) {
-    const val = parseInt(match[1], 10);
-    const unit = (match[2] || 'd').charAt(0).toLowerCase();
-    if (unit === 'h') return Math.max(1, val);
-    if (unit === 'd') return Math.max(1, val * 24);
-    if (unit === 'w') return Math.max(1, val * 7 * 24);
-    if (unit === 'm') return Math.max(1, val * 30 * 24);
-  }
-  return null;
-}
+import {
+  parseFrequencyToHours,
+  parseFrequencyToMs,
+  parseFrequencyToDays,
+  getFrequencyLabel,
+} from '../../../scripts/frequency.js';
 
-export function parseFrequencyToMs(freqStr) {
-  const hours = parseFrequencyToHours(freqStr);
-  return hours !== null ? hours * 60 * 60 * 1000 : null;
-}
-
-export function parseFrequencyToDays(freqStr) {
-  if (!freqStr) return 1;
-  const str = String(freqStr).trim().toLowerCase();
-  if (['daily', '1d'].includes(str)) return 1;
-  if (['weekly', '7d', '1w'].includes(str)) return 7;
-  if (['biweekly', 'bi-weekly', '14d', '2w'].includes(str)) return 14;
-  if (['monthly', '30d', '1m'].includes(str)) return 30;
-  if (['1h', '3h'].includes(str)) return 1;
-  const match = str.match(/^(\d+)\s*(d|days?|w|weeks?|m|months?|h|hours?)?$/i);
-  if (match) {
-    const val = parseInt(match[1], 10);
-    const unit = (match[2] || 'd').charAt(0).toLowerCase();
-    if (unit === 'd') return Math.max(1, val);
-    if (unit === 'w') return Math.max(1, val * 7);
-    if (unit === 'm') return Math.max(1, val * 30);
-    if (unit === 'h') return Math.max(1, Math.round(val / 24));
-  }
-  return null;
-}
+export {
+  parseFrequencyToHours,
+  parseFrequencyToMs,
+  parseFrequencyToDays,
+  getFrequencyLabel,
+};
 
 export function filterEligibleTopics(candidates = [], now = new Date(), options = null) {
   // Support numeric targetHour as 3rd param or options object
@@ -377,15 +345,47 @@ export async function processInitialTopicAlerts({ db, client, logger = console, 
   return { checked: eligible.length, alerted: alertedCount };
 }
 
+let schedulerStatus = {
+  running: false,
+  startedAt: null,
+  lastHeartbeatAt: null,
+  lastPreFetchAt: null,
+  lastDispatchAt: null,
+  lastInitialCheckAt: null,
+  tasks: {
+    prefetch: '50 * * * *',
+    dispatch: '0 * * * *',
+    trendingRadar: '45 7,13,19 * * *',
+    initialTicker: '* * * * *',
+  },
+};
+
+export function getSchedulerStatus() {
+  const now = Date.now();
+  const lastHeartbeatMs = schedulerStatus.lastHeartbeatAt ? new Date(schedulerStatus.lastHeartbeatAt).getTime() : 0;
+  // Consider healthy if running and heartbeat received within last 3 minutes
+  const isHealthy = schedulerStatus.running && (now - lastHeartbeatMs < 3 * 60 * 1000);
+
+  return {
+    ...schedulerStatus,
+    healthy: isHealthy,
+  };
+}
+
 export function startCronScheduler(database = getDb, { client, gemini, enabled = true, logger = console } = {}) {
   if (!enabled) return null;
   const dbProvider = database || getDb;
   const apiClient = client || createSerpApiClient();
   const geminiClient = gemini !== undefined ? gemini : getGeminiClient();
 
+  schedulerStatus.running = true;
+  schedulerStatus.startedAt = new Date().toISOString();
+  schedulerStatus.lastHeartbeatAt = new Date().toISOString();
+
   // 1. Two-phase pre-fetch (T - 10 min): pulls SerpApi + Gemini at minute 50
   const prefetchTask = cron.schedule('50 * * * *', async () => {
     try {
+      schedulerStatus.lastPreFetchAt = new Date().toISOString();
       await prefetchUpcomingTopics({
         db: typeof dbProvider === 'function' ? dbProvider() : dbProvider,
         client: apiClient,
@@ -400,6 +400,7 @@ export function startCronScheduler(database = getDb, { client, gemini, enabled =
   // 2. Scheduled alert delivery: instant dispatch at minute 0
   const dispatchTask = cron.schedule('0 * * * *', async () => {
     try {
+      schedulerStatus.lastDispatchAt = new Date().toISOString();
       await dispatchDueAlerts({
         db: typeof dbProvider === 'function' ? dbProvider() : dbProvider,
         client: apiClient,
@@ -427,6 +428,8 @@ export function startCronScheduler(database = getDb, { client, gemini, enabled =
   // 4. Minute ticker: checks newly created topics that crossed the 10-minute threshold
   const initialTicker = cron.schedule('* * * * *', async () => {
     try {
+      schedulerStatus.lastHeartbeatAt = new Date().toISOString();
+      schedulerStatus.lastInitialCheckAt = new Date().toISOString();
       await processInitialTopicAlerts({
         db: typeof dbProvider === 'function' ? dbProvider() : dbProvider,
         client: apiClient,
@@ -441,6 +444,7 @@ export function startCronScheduler(database = getDb, { client, gemini, enabled =
 
   return {
     stop: () => {
+      schedulerStatus.running = false;
       prefetchTask.stop();
       dispatchTask.stop();
       trendingRadarTask.stop();

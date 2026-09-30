@@ -83,24 +83,22 @@ export function diff(previous, current) {
   const prevMap = buildItemMap(prevItems);
   const currMap = buildItemMap(currItems);
 
-  const changes = [];
+  const newResults = [];
+  const removedResults = [];
+  const modifiedResults = [];
   const sourceUrls = new Set();
 
   // 1. Detect new links
   for (const [link, currItem] of currMap) {
     if (!prevMap.has(link)) {
-      const title = currItem.title ? currItem.title.trim() : link;
-      changes.push(`New result: ${title}`);
-      sourceUrls.add(link);
+      newResults.push({ link, item: currItem });
     }
   }
 
   // 2. Detect removed links
   for (const [link, prevItem] of prevMap) {
     if (!currMap.has(link)) {
-      const title = prevItem.title ? prevItem.title.trim() : link;
-      changes.push(`Removed result: ${title}`);
-      sourceUrls.add(link);
+      removedResults.push({ link, item: prevItem });
     }
   }
 
@@ -113,24 +111,64 @@ export function diff(previous, current) {
     const prevTitle = (prevItem.title || '').trim();
     const currTitle = (currItem.title || '').trim();
     if (prevTitle && currTitle && prevTitle !== currTitle) {
-      changes.push(`Changed title on ${site}: "${prevTitle}" → "${currTitle}"`);
+      modifiedResults.push(`Changed title on ${site}: "${prevTitle}" → "${currTitle}"`);
       sourceUrls.add(link);
     }
 
     const prevSnippet = (prevItem.snippet || '').trim();
     const currSnippet = (currItem.snippet || '').trim();
     if (prevSnippet && currSnippet && prevSnippet !== currSnippet) {
-      changes.push(`Changed on ${site}: ${prevSnippet} → ${currSnippet}`);
+      modifiedResults.push(`Changed on ${site}: ${prevSnippet} → ${currSnippet}`);
       sourceUrls.add(link);
     }
 
     const prevDate = (prevItem.date || '').trim();
     const currDate = (currItem.date || '').trim();
     if (prevDate !== currDate && (prevDate || currDate)) {
-      changes.push(`Changed date on ${site}: ${prevDate || 'None'} → ${currDate || 'None'}`);
+      modifiedResults.push(`Changed date on ${site}: ${prevDate || 'None'} → ${currDate || 'None'}`);
       sourceUrls.add(link);
     }
   }
+
+  // Boundary churn guard:
+  // When a search result list is capped at max window size (>= 10 items), items at the bottom edge
+  // (position >= 10) frequently shift between rank 10 and rank 11 due to search algorithm jitter.
+  // If the ONLY difference in a full window is bottom-boundary swap with zero modifications elsewhere,
+  // suppress the false-positive diff.
+  const isFullWindow = prevItems.length >= 10 && currItems.length >= 10;
+  const isOnlyBoundaryChurn = isFullWindow &&
+    modifiedResults.length === 0 &&
+    newResults.length > 0 &&
+    newResults.every(({ item }) => item.position !== undefined && item.position >= 10) &&
+    removedResults.length > 0 &&
+    removedResults.every(({ item }) => item.position !== undefined && item.position >= 10);
+
+  if (isOnlyBoundaryChurn) {
+    return null;
+  }
+
+  // Filter out displaced tail items (pushed out to rank 11 because a higher result was added)
+  const filteredRemoved = removedResults.filter(({ item }) => {
+    if (isFullWindow && item.position !== undefined && item.position >= 10 && newResults.some((n) => n.item.position < 10)) {
+      return false;
+    }
+    return true;
+  });
+
+  const changes = [];
+  for (const { link, item } of newResults) {
+    const title = item.title ? item.title.trim() : link;
+    changes.push(`New result: ${title}`);
+    sourceUrls.add(link);
+  }
+
+  for (const { link, item } of filteredRemoved) {
+    const title = item.title ? item.title.trim() : link;
+    changes.push(`Removed result: ${title}`);
+    sourceUrls.add(link);
+  }
+
+  changes.push(...modifiedResults);
 
   if (changes.length === 0) {
     return null;

@@ -202,4 +202,58 @@ describe('diff-engine', () => {
     assert.ok(result.summary.includes('Changed on pmkisan.gov.in: Income limit ₹2L for eligible farmers. → Income limit revised to ₹2.5L'));
     assert.deepEqual(result.sourceUrls, ['https://pmkisan.gov.in/guidelines.pdf']);
   });
+
+  test('boundary rank churn at rank 10/11 on full 10-result window is suppressed as false positive', () => {
+    // Generate 10 search results
+    const prevSearch = Array.from({ length: 10 }, (_, i) => ({
+      position: i + 1,
+      title: `Result Title #${i + 1}`,
+      link: `https://example.gov.in/page-${i + 1}`,
+      snippet: `Snippet content for result ${i + 1}`,
+    }));
+
+    // In current pull, ranks 1-9 are identical, but rank 10 swapped with rank 11
+    const currSearch = [
+      ...prevSearch.slice(0, 9),
+      {
+        position: 10,
+        title: 'New Result Title #10 (Swapped with #11)',
+        link: 'https://example.gov.in/page-11-entering-10',
+        snippet: 'Snippet content for entering result',
+      },
+    ];
+
+    const result = diff({ search: prevSearch, news: [] }, { search: currSearch, news: [] });
+    // Pure boundary churn at rank 10 in a full 10-result list must return null
+    assert.equal(result, null);
+  });
+
+  test('high-rank insertion at rank 1 reports new result without confusing displaced rank-10 removal', () => {
+    const prevSearch = Array.from({ length: 10 }, (_, i) => ({
+      position: i + 1,
+      title: `Result Title #${i + 1}`,
+      link: `https://example.gov.in/page-${i + 1}`,
+      snippet: `Snippet content for result ${i + 1}`,
+    }));
+
+    const breakingNewsItem = {
+      position: 1,
+      title: 'BREAKING: Official Exam Notification Released',
+      link: 'https://gov.in/breaking-news-exam',
+      snippet: 'Official notification released today.',
+    };
+
+    // New item at rank 1, previous items shifted down, rank 10 falls off to rank 11
+    const currSearch = [
+      breakingNewsItem,
+      ...prevSearch.slice(0, 9).map((item, idx) => ({ ...item, position: idx + 2 })),
+    ];
+
+    const result = diff({ search: prevSearch, news: [] }, { search: currSearch, news: [] });
+    assert.notEqual(result, null);
+    // Reports the real new breaking result
+    assert.ok(result.summary.includes('New result: BREAKING: Official Exam Notification Released'));
+    // Suppresses false "Removed result: Result Title #10" because it was merely displaced to rank 11
+    assert.ok(!result.summary.includes('Removed result: Result Title #10'));
+  });
 });

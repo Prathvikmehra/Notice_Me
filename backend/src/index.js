@@ -6,7 +6,7 @@ import createTopicsRouter from './routes/topics.js';
 import createTimelineRouter from './routes/timeline.js';
 import createUserRouter from './routes/user.js';
 import { getDb } from './services/db.js';
-import { startCronScheduler } from './services/cronService.js';
+import { startCronScheduler, getSchedulerStatus } from './services/cronService.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export function createApp(db, { auth } = {}) {
@@ -16,7 +16,17 @@ export function createApp(db, { auth } = {}) {
   app.use(express.json({ limit: '32kb' }));
   if (auth) app.use(auth);
   app.get('/', (req, res) => res.json({ status: 'ok', service: 'Notice Me API' }));
-  app.get('/health', (req, res) => res.json({ status: 'ok' }));
+  app.get('/health', (req, res) => {
+    const scheduler = getSchedulerStatus();
+    const isHealthy = !scheduler.running || scheduler.healthy;
+    res.status(isHealthy ? 200 : 503).json({
+      status: isHealthy ? 'ok' : 'degraded',
+      service: 'Notice Me API',
+      uptimeSec: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
+      scheduler,
+    });
+  });
   app.use('/api/user', createUserRouter(db));
   app.use('/api/topics', createTopicsRouter(db));
   app.use('/api/topics', createTimelineRouter(db));

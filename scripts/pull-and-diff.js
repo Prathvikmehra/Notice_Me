@@ -8,14 +8,18 @@ export const FREQUENCIES = {
   '1h': 60 * 60 * 1000,
   '3h': 3 * 60 * 60 * 1000,
   '1d': 24 * 60 * 60 * 1000,
+  '2d': 2 * 24 * 60 * 60 * 1000,
   '3d': 3 * 24 * 60 * 60 * 1000,
+  '5d': 5 * 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '14d': 14 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
 };
 
 export function parseFrequencyToMs(freqStr) {
   if (!freqStr) return 24 * 60 * 60 * 1000;
   const str = String(freqStr).trim().toLowerCase();
-  if (str === '1h') return 60 * 60 * 1000;
-  if (str === '3h') return 3 * 60 * 60 * 1000;
+  if (FREQUENCIES[str]) return FREQUENCIES[str];
   if (['daily', '1d'].includes(str)) return 24 * 60 * 60 * 1000;
   if (['weekly', '7d', '1w'].includes(str)) return 7 * 24 * 60 * 60 * 1000;
   if (['biweekly', 'bi-weekly', '14d', '2w'].includes(str)) return 14 * 24 * 60 * 60 * 1000;
@@ -29,7 +33,7 @@ export function parseFrequencyToMs(freqStr) {
     if (unit === 'w') return Math.max(1, val) * 7 * 24 * 60 * 60 * 1000;
     if (unit === 'm') return Math.max(1, val) * 30 * 24 * 60 * 60 * 1000;
   }
-  return FREQUENCIES[str] || FREQUENCIES['3h'];
+  return 24 * 60 * 60 * 1000;
 }
 
 function isAlertDue(topic) {
