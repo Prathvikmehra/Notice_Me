@@ -16,6 +16,7 @@
   "scripts": {
     "preinstall": "npx --yes only-allow pnpm",
     "start": "node backend/src/index.js",
+    "build": "pnpm prisma:generate",
     "backend": "npm --workspace=backend run dev",
     "frontend": "npm --workspace=frontend run dev",
     "prisma:generate": "prisma generate --schema=backend/prisma/schema.prisma",
