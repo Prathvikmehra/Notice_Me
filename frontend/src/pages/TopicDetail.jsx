@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { getLatestSnapshot, getTimeline, updateAlertSettings, syncTopic } from '../api/client.js';
 import TimelineView from '../components/TimelineView.jsx';
+import DossierModal from '../components/DossierModal.jsx';
 
 const STANDARD_FREQS = ['1d', '2d', '3d', '5d', '7d', '14d', '30d'];
 
@@ -59,6 +60,7 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [showDossier, setShowDossier] = useState(() => new URL(window.location.href).searchParams.get('dossier') === 'open');
 
   useEffect(() => {
     setEnabled(Boolean(topic.alertEnabled));
@@ -198,6 +200,15 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
         <div className="header-actions">
           <button
             type="button"
+            className="button button-quiet export-dossier-button"
+            onClick={() => setShowDossier(true)}
+            disabled={!briefing || syncing}
+            title="Export full executive intelligence dossier as PDF, Markdown, or share link"
+          >
+            📄 Export Dossier
+          </button>
+          <button
+            type="button"
             className={`button button-sync ${syncing ? 'is-syncing' : ''}`}
             onClick={handleSync}
             disabled={syncing || busy}
@@ -223,6 +234,16 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
           <span>NEWS SOURCES</span>
           <strong>{results?.news?.length ?? (syncing ? '…' : '0')}</strong>
         </div>
+        <div className="metric metric-volatility">
+          <span>VOLATILITY RADAR</span>
+          <strong className={`metric-volatility-val val-${(briefing?.urgency || 'routine').toLowerCase()}`}>
+            {briefing?.volatilityScore ?? 25}
+            <small>/100</small>
+            <span className={`volatility-pill pill-${(briefing?.urgency || 'routine').toLowerCase()}`}>
+              {briefing?.urgency || 'STABLE'}
+            </span>
+          </strong>
+        </div>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {message && <p className="form-success" role="status">{message}</p>}
@@ -235,6 +256,24 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
               <span>{briefing.tag}</span>
             </div>
             <span className="briefing-source-tag">SERPAPI REAL-TIME INTELLIGENCE</span>
+          </div>
+
+          <div className="briefing-radar-strip">
+            <div className="radar-strip-left">
+              <span className={`radar-urgency-badge urgency-${(briefing.urgency || 'routine').toLowerCase()}`}>
+                <span className="urgency-beacon" />
+                {briefing.urgency || 'ROUTINE'} ACTION REQUIRED
+              </span>
+              <span className="radar-strip-meta">
+                Volatility Index: <strong>{briefing.volatilityScore ?? 35}</strong>/100
+              </span>
+            </div>
+            <div className="radar-track-bar">
+              <div
+                className={`radar-fill-bar fill-${(briefing.urgency || 'routine').toLowerCase()}`}
+                style={{ width: `${briefing.volatilityScore ?? 35}%` }}
+              />
+            </div>
           </div>
 
           <div className="briefing-summary-box">
@@ -511,6 +550,20 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
         </form>
       </section>
       {results && <details className="snapshot-details"><summary>View latest sources</summary><div className="snapshot-columns"><div><h3>Search</h3>{results.search.map((item) => <SourceLink key={item.link} item={item} />)}</div><div><h3>News</h3>{results.news.map((item) => <SourceLink key={item.link} item={item} />)}</div></div></details>}
+
+      {showDossier && (
+        <DossierModal
+          topic={topic}
+          briefing={briefing}
+          diffs={diffs}
+          onClose={() => {
+            setShowDossier(false);
+            const url = new URL(window.location.href);
+            url.searchParams.delete('dossier');
+            window.history.replaceState(null, '', url);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -583,9 +636,21 @@ function getLiveBriefing(results, topic) {
       });
     }
     const primaryRecord = rawSearch[0] || rawNews[0];
+    let urgency = results.aiBriefing.urgency;
+    if (!urgency) {
+      const hasHighDeadline = Array.isArray(results.aiBriefing.deadlines) &&
+        results.aiBriefing.deadlines.some((d) => String(d.urgency).toUpperCase() === 'HIGH');
+      urgency = hasHighDeadline ? 'CRITICAL' : 'MODERATE';
+    }
+    const volatilityScore = typeof results.aiBriefing.volatilityScore === 'number'
+      ? results.aiBriefing.volatilityScore
+      : (urgency === 'CRITICAL' ? 88 : urgency === 'MODERATE' ? 58 : 28);
+
     return {
       tag: 'GEMINI AI VERIFIED BRIEFING',
       coreStatus: results.aiBriefing.coreStatus,
+      urgency,
+      volatilityScore,
       primarySource: primaryRecord ? { name: primaryRecord.source || getHostname(primaryRecord.link), link: primaryRecord.link } : null,
       keyPoints: Array.isArray(results.aiBriefing.keyPoints) ? results.aiBriefing.keyPoints : [],
       deadlines: Array.isArray(results.aiBriefing.deadlines) ? results.aiBriefing.deadlines : [],
@@ -620,6 +685,8 @@ function getLiveBriefing(results, topic) {
     return {
       tag: results.overview.label || 'SERPAPI INTELLIGENCE',
       coreStatus: results.overview.text,
+      urgency: 'MODERATE',
+      volatilityScore: 50,
       primarySource: results.overview.source ? { name: results.overview.source, link: results.overview.link } : null,
       keyPoints: [],
       bulletins: bulletins.slice(0, 3),
@@ -736,10 +803,18 @@ function getLiveBriefing(results, topic) {
   }
 
   const primaryRecord = (relevantSearch[0] || (relevantNews.length ? relevantNews[0] : searchItems[0]));
+  const combinedText = `${coreStatus} ${searchItems.map((s) => s.title + ' ' + s.snippet).join(' ')} ${newsItems.map((n) => n.title).join(' ')}`.toLowerCase();
+  const isCritical = /deadline|last date|postpon|cancel|stay order|cutoff|hall ticket|admit card|urgent|scheduled|verdict/i.test(combinedText);
+  const isModerate = /admit|apply|admissions|registration|scheme|policy|eligibility|result|release|announcement/i.test(combinedText);
+
+  const urgency = isCritical ? 'CRITICAL' : (isModerate ? 'MODERATE' : 'ROUTINE');
+  const volatilityScore = isCritical ? 84 : (isModerate ? 55 : 24);
 
   return {
     tag: relevantNews.length ? 'VERIFIED NEWS & NOTICE RADAR' : 'LIVE INTELLIGENCE BRIEFING',
     coreStatus,
+    urgency,
+    volatilityScore,
     primarySource: primaryRecord ? { name: primaryRecord.source || getHostname(primaryRecord.link), link: primaryRecord.link } : null,
     keyPoints: keyPoints.slice(0, 3),
     bulletins: bulletins.slice(0, 3),
