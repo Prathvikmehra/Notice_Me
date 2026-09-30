@@ -3,7 +3,7 @@ import { getDb } from '../services/db.js';
 import * as alertService from '../services/alertService.js';
 import { syncTopic, isTopicSyncing } from '../services/topicSyncService.js';
 import { parseFrequencyToDays, parseFrequencyToHours } from '../services/cronService.js';
-import { getCachedTrending } from '../services/trendingService.js';
+import { getCachedTrending, refreshTrendingRadar } from '../services/trendingService.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const isAlertConfigured = alertService.isAlertConfigured;
@@ -16,6 +16,8 @@ const CATEGORIES = ['scheme', 'exam', 'recruitment', 'case', 'policy', 'admissio
 const MAX_FREE_TOPICS = 5;
 const VALID_HOURS = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0];
 const VALID_DAYS = ['weekdays', 'all', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+const isTestEnv = () => process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT) || process.argv.some((a) => a.includes('test'));
 
 // Rate limit map: userId -> [timestamp, timestamp, ...]
 const userSyncHistory = new Map();
@@ -133,7 +135,19 @@ export function createTopicsRouter(database = getDb) {
 
   // Public endpoint for trending tracks (accessible without auth)
   router.get('/trending', attempt(async (req, res) => {
-    const trending = getCachedTrending();
+    let trending = getCachedTrending();
+
+    // If query ?refresh=true requested, force live refresh via SerpApi Trends
+    if (!isTestEnv()) {
+      if (req.query?.refresh === 'true') {
+        await refreshTrendingRadar().catch(() => {});
+        trending = getCachedTrending();
+      } else if (trending[0]?.lastRefreshed === null) {
+        // Background warm-up
+        refreshTrendingRadar().catch(() => {});
+      }
+    }
+
     try {
       const client = db();
       if (client?.topic?.findMany) {

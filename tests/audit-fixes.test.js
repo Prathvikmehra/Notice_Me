@@ -270,3 +270,57 @@ test('Enabling alerts with user fallback email succeeds without 409 when SMTP is
   }
 });
 
+test('SerpApi Google Trends dynamically generates and refreshes trending public notices', async () => {
+  const { parseSerpTrendsToTopics, refreshTrendingRadar, getCachedTrending } = await import('../backend/src/services/trendingService.js');
+
+  const rawTrends = [
+    {
+      query: 'seat matrix',
+      search_volume: 50000,
+      increase_percentage: 800,
+      categories: [{ id: 9, name: 'Jobs and Education' }],
+      trend_breakdown: ['nmc seat matrix 2026 neet pg'],
+    },
+    {
+      query: '5000 electric buses in bhopal',
+      search_volume: 15000,
+      increase_percentage: 120,
+      categories: [{ id: 3, name: 'Business and Finance' }],
+    },
+    {
+      query: 'entertainment movie song',
+      search_volume: 200000,
+      increase_percentage: 100,
+      categories: [{ id: 4, name: 'Entertainment' }],
+    },
+  ];
+
+  const parsed = parseSerpTrendsToTopics(rawTrends);
+  assert.equal(parsed.length, 2); // Excludes entertainment movie song
+  assert.equal(parsed[0].name, 'Nmc Seat Matrix 2026 Neet Pg');
+  assert.equal(parsed[0].category, 'exam');
+  assert.match(parsed[0].badge, /800% BREAKOUT/);
+  assert.equal(parsed[1].name, '5000 Electric Buses In Bhopal');
+  assert.equal(parsed[1].category, 'policy');
+
+  const mockTrendsClient = {
+    googleTrendsNow: async () => rawTrends,
+    pullSnapshot: async (q) => ({
+      search: [{ title: `${q} Official Portal`, link: 'https://nmc.org.in/neet-pg', snippet: 'Official notice released.' }],
+      news: [{ title: `${q} Breaking News`, link: 'https://news.example.com', date: '1h ago', snippet: 'Latest release.' }],
+      pulledAt: new Date().toISOString(),
+    }),
+  };
+
+  const res = await refreshTrendingRadar({
+    client: mockTrendsClient,
+    gemini: null,
+    logger: { info() {}, warn() {} },
+  });
+
+  assert.equal(res.refreshed, 2);
+  const cached = getCachedTrending();
+  assert.equal(cached.length, 2);
+  assert.equal(cached[0].officialSource, 'nmc.org.in');
+});
+

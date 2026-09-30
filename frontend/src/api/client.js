@@ -38,4 +38,4 @@ export const syncTopic = (id) => request(`/api/topics/${encodeURIComponent(id)}/
 export const searchTopics = async (q) => request(`/api/topics/search?q=${encodeURIComponent(q)}`);
 export const getProfile = async () => (await request('/api/user/me'));
 export const upgradePlan = async (plan = 'pro') => (await request('/api/user/upgrade', { method: 'POST', body: JSON.stringify({ plan }) }));
-export const getTrendingTopics = async () => (await request('/api/topics/trending')).trending;
+export const getTrendingTopics = async (refresh = false) => (await request(`/api/topics/trending${refresh ? '?refresh=true' : ''}`)).trending;

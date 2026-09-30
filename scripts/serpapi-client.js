@@ -127,12 +127,16 @@ export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.
   let keyOffset = 0;
   const usage = keys.map(({ index }) => ({ keyIndex: index, attempts: 0, successfulResponses: 0 }));
 
-  async function request(engine, query) {
-    text(query, 'query');
+  async function request(engine, query, extraParams = {}) {
+    if (query !== undefined && query !== null && query !== '') {
+      text(query, 'query');
+    }
     while (keyOffset < keys.length) {
       const { index, key } = keys[keyOffset];
       const url = new URL('https://serpapi.com/search.json');
-      url.search = new URLSearchParams({ engine, q: query, api_key: key, hl: 'en', gl: 'in' });
+      const params = { engine, api_key: key, hl: 'en', gl: 'in', ...extraParams };
+      if (query) params.q = query;
+      url.search = new URLSearchParams(params);
       logger.info(`SerpApi ${engine}: using key index ${index}.`);
       const counter = usage[keyOffset];
       counter.attempts += 1;
@@ -178,6 +182,11 @@ export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.
     return trimNews(await request('google_news', query));
   }
 
+  async function googleTrendsNow({ geo = 'IN' } = {}) {
+    const raw = await request('google_trends_trending_now', null, { geo });
+    return Array.isArray(raw?.trending_searches) ? raw.trending_searches : [];
+  }
+
   async function pullSnapshot(query) {
     // Sequential pulls also let News reuse the working key selected by Search.
     const searchRaw = await request('google', query);
@@ -189,5 +198,5 @@ export function createSerpApiClient({ env = process.env, fetchImpl = globalThis.
     return snapshot;
   }
 
-  return { googleSearch, googleNews, pullSnapshot, getUsage: () => usage.map((counter) => ({ ...counter })) };
+  return { googleSearch, googleNews, pullSnapshot, googleTrendsNow, getUsage: () => usage.map((counter) => ({ ...counter })) };
 }
