@@ -45,6 +45,7 @@ export default function Dashboard() {
   }, [revision]);
 
   useEffect(() => {
+    if (loading) return;
     const url = new URL(window.location.href);
     if (viewMode === 'trending') {
       url.searchParams.set('view', 'trending');
@@ -59,7 +60,7 @@ export default function Dashboard() {
       }
     }
     window.history.replaceState(null, '', url);
-  }, [selectedId, topics, viewMode]);
+  }, [selectedId, topics, viewMode, loading]);
 
   useEffect(() => {
     const onPopState = () => {

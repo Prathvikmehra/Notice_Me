@@ -24,6 +24,16 @@ function checkUserSyncRateLimit(userId) {
   const now = Date.now();
   const windowMs = 60 * 1000;
   const maxSyncs = 10;
+
+  // Cleanup expired entries periodically to prevent memory leaks
+  if (userSyncHistory.size > 500) {
+    for (const [uid, times] of userSyncHistory) {
+      const active = times.filter((t) => now - t < windowMs);
+      if (active.length === 0) userSyncHistory.delete(uid);
+      else userSyncHistory.set(uid, active);
+    }
+  }
+
   const timestamps = userSyncHistory.get(userId) || [];
   const validTimestamps = timestamps.filter((t) => now - t < windowMs);
   if (validTimestamps.length >= maxSyncs) {
@@ -125,6 +135,11 @@ export function createTopicsRouter(database = getDb) {
   const router = Router();
   const db = () => typeof database === 'function' ? database() : database;
 
+  // Public endpoint for trending tracks (accessible without auth)
+  router.get('/trending', attempt(async (req, res) => {
+    res.json({ trending: getCachedTrending() });
+  }));
+
   router.use(requireAuth);
 
   router.get('/', attempt(async (req, res) => {
@@ -132,8 +147,11 @@ export function createTopicsRouter(database = getDb) {
     res.json({ topics });
   }));
 
-  router.get('/trending', attempt(async (req, res) => {
-    res.json({ trending: getCachedTrending() });
+  router.get('/item/:id', attempt(async (req, res) => {
+    const topic = await db().topic.findUnique({ where: { id: req.params.id } });
+    if (!topic) throw problem(404, 'Topic not found.');
+    if (topic.userId !== req.user.id) throw problem(403, 'You do not own this topic.');
+    res.json({ topic });
   }));
 
   router.get('/search', attempt(async (req, res) => {
