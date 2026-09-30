@@ -4,21 +4,15 @@ import { createSerpApiClient } from './serpapi-client.js';
 import { diff } from './diff-engine.js';
 import * as alertService from '../backend/src/services/alertService.js';
 
-import { FREQUENCIES, parseFrequencyToMs as canonicalParseFrequencyToMs } from './frequency.js';
-
-export { FREQUENCIES };
-
-export function parseFrequencyToMs(freqStr) {
-  const ms = canonicalParseFrequencyToMs(freqStr);
-  return ms !== null ? ms : 24 * 60 * 60 * 1000;
-}
+export { FREQUENCIES, parseFrequencyToMs } from './frequency.js';
+import { parseFrequencyToMs } from './frequency.js';
 
 
 function isAlertDue(topic) {
   if (!topic?.alertEmail) return false;
   if (topic.alertEnabled === false) return false;
   if (topic.lastAlertedAt && topic.alertFrequency) {
-    const minInterval = parseFrequencyToMs(topic.alertFrequency);
+    const minInterval = parseFrequencyToMs(topic.alertFrequency) || 24 * 60 * 60 * 1000;
     const elapsed = Date.now() - new Date(topic.lastAlertedAt).getTime();
     if (elapsed < minInterval) return false;
   }

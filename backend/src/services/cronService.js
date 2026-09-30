@@ -246,6 +246,11 @@ export async function dispatchDueAlerts({ db, client, gemini, logger = console, 
       });
 
       if (pendingDiff) {
+        if (!alertService.isAlertConfigured()) {
+          logger.warn(`Cron [Dispatch]: SMTP not configured; skipping email dispatch for topic ${topic.id}`);
+          await activeDb.topic.update({ where: { id: topic.id }, data: { lastAlertedAt: now } });
+          return;
+        }
         await alertService.sendDiffAlert(topic, pendingDiff);
         await activeDb.diff.update({ where: { id: pendingDiff.id }, data: { alerted: true } });
         await activeDb.topic.update({ where: { id: topic.id }, data: { lastAlertedAt: now } });

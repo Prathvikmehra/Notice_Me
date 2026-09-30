@@ -118,14 +118,10 @@ export function validateAlertSettings(body = {}, { isUpdate = false, userEmail =
     }
   }
 
-  // 7. Verify SMTP availability if alerts are enabled or email configured
-  const emailCandidate = result.alertEmail !== undefined ? result.alertEmail : (existing?.alertEmail ?? (result.alertEnabled ? userEmail : null));
-  const enabledCandidate = result.alertEnabled !== undefined ? result.alertEnabled : (existing?.alertEnabled ?? false);
-
-  if (result.alertEmail || (enabledCandidate && emailCandidate)) {
-    if (!isAlertConfigured()) {
-      throw problem(409, 'Email alerts are unavailable until SMTP is configured.');
-    }
+  // 7. Verify SMTP availability only if email was explicitly set in this request
+  const hasExplicitEmail = body.email !== undefined || body.alertEmail !== undefined;
+  if (hasExplicitEmail && result.alertEmail && !isAlertConfigured()) {
+    throw problem(409, 'Email alerts are unavailable until SMTP is configured.');
   }
 
   return result;

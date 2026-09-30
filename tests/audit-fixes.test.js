@@ -227,3 +227,46 @@ test('User router upgrade endpoint switches user between free and pro plans', as
   assert.equal(currentPlan, 'pro');
   assert.ok(responseData.message.includes('Pro tier'));
 });
+
+test('Enabling alerts with user fallback email succeeds without 409 when SMTP is unconfigured', async () => {
+  const { createTopicsRouter } = await import('../backend/src/routes/topics.js');
+  const smtpVars = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'ALERT_FROM'];
+  const saved = {};
+  for (const k of smtpVars) {
+    saved[k] = process.env[k];
+    delete process.env[k];
+  }
+  try {
+    const mockDb = {
+      topic: {
+        findUnique: async () => ({ id: 't1', userId: 'u1', alertEmail: null, alertEnabled: false }),
+        update: async ({ data }) => ({ id: 't1', ...data }),
+      },
+    };
+    const router = createTopicsRouter(() => mockDb);
+    const layer = router.stack.find((l) => l.route?.path === '/:id/alert-settings' && l.route?.methods?.post);
+    let statusCode = 200;
+    let jsonBody = null;
+    let errPassed = null;
+    const req = {
+      params: { id: 't1' },
+      user: { id: 'u1', email: 'user@example.com' },
+      body: { alertEnabled: true, alertFrequency: '1d' },
+      headers: { authorization: 'Bearer token' },
+    };
+    const res = {
+      status: (code) => { statusCode = code; return res; },
+      json: (data) => { jsonBody = data; return res; },
+    };
+    await layer.route.stack[layer.route.stack.length - 1].handle(req, res, (err) => { errPassed = err; });
+    assert.equal(errPassed, null);
+    assert.equal(statusCode, 200);
+    assert.equal(jsonBody.topic.alertEnabled, true);
+    assert.equal(jsonBody.topic.alertEmail, 'user@example.com');
+  } finally {
+    for (const k of smtpVars) {
+      if (saved[k]) process.env[k] = saved[k];
+    }
+  }
+});
+
