@@ -33,6 +33,8 @@ model Topic {
   createdAt      DateTime   @default(now())
   snapshots      Snapshot[]
   diffs          Diff[]
+
+  @@index([userId])
 }
 
 model Snapshot {
@@ -41,6 +43,8 @@ model Snapshot {
   topic    Topic    @relation(fields: [topicId], references: [id])
   rawData  Json
   pulledAt DateTime @default(now())
+
+  @@index([topicId, pulledAt(sort: Desc)])
 }
 
 model Diff {
@@ -51,4 +55,7 @@ model Diff {
   sourceUrls String[]
   detectedAt DateTime @default(now())
   alerted    Boolean  @default(false)
+
+  @@index([topicId, detectedAt(sort: Desc)])
+  @@index([topicId, alerted])
 }

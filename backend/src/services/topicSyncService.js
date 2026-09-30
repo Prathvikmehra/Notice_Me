@@ -45,12 +45,37 @@ export async function syncTopic(topicId, database = getDb, customClient = null, 
       }
     }
 
-    const { snapshot, change, isBaseline } = await db.$transaction(async (tx) => {
-      const previous = await tx.snapshot.findFirst({
-        where: { topicId: topic.id },
-        orderBy: [{ pulledAt: 'desc' }, { id: 'desc' }],
-      });
+    // 1. Fetch previous snapshot read-only before opening write transaction
+    const previous = await db.snapshot.findFirst({
+      where: { topicId: topic.id },
+      orderBy: [{ pulledAt: 'desc' }, { id: 'desc' }],
+    });
 
+    const isBaseline = !previous;
+    let diffResult = null;
+    let diffSummary = null;
+
+    if (previous) {
+      diffResult = await diff(previous, { rawData, pulledAt: new Date(rawData.pulledAt || Date.now()) });
+      if (diffResult?.summary && diffResult?.sourceUrls?.length) {
+        diffSummary = diffResult.summary;
+        if (gemini) {
+          try {
+            const humanSummary = await gemini.generateDiffSummary(topic, {
+              previous: previous.rawData,
+              current: rawData,
+              rawSummary: diffResult.summary,
+            });
+            if (humanSummary) diffSummary = humanSummary;
+          } catch (err) {
+            console.warn('Gemini diff explanation skipped:', err.message);
+          }
+        }
+      }
+    }
+
+    // 2. Fast atomic write transaction (inserts + retention pruning)
+    const { snapshot, change } = await db.$transaction(async (tx) => {
       const current = await tx.snapshot.create({
         data: {
           topicId: topic.id,
@@ -79,40 +104,40 @@ export async function syncTopic(topicId, database = getDb, customClient = null, 
         }
       }
 
-      if (!previous) {
-        return { snapshot: current, change: null, isBaseline: true };
-      }
+      let createdDiff = null;
+      if (diffResult?.summary && diffResult?.sourceUrls?.length) {
+        createdDiff = await tx.diff.create({
+          data: {
+            topicId: topic.id,
+            summary: diffSummary,
+            sourceUrls: diffResult.sourceUrls,
+            alerted: false,
+          },
+        });
 
-      const result = await diff(previous, current);
-      if (!result?.summary || !result?.sourceUrls?.length) {
-        return { snapshot: current, change: null, isBaseline: false };
-      }
-
-      let diffSummary = result.summary;
-      if (gemini) {
-        try {
-          const humanSummary = await gemini.generateDiffSummary(topic, {
-            previous: previous.rawData,
-            current: rawData,
-            rawSummary: result.summary,
-          });
-          if (humanSummary) diffSummary = humanSummary;
-        } catch (err) {
-          console.warn('Gemini diff explanation skipped:', err.message);
+        // Prune diffs beyond retention limit
+        const diffRetentionLimit = Number(process.env.DIFF_RETENTION_LIMIT || 50);
+        if (typeof tx.diff.findMany === 'function' && typeof tx.diff.deleteMany === 'function') {
+          try {
+            const excessDiffs = await tx.diff.findMany({
+              where: { topicId: topic.id },
+              orderBy: [{ detectedAt: 'desc' }, { id: 'desc' }],
+              skip: diffRetentionLimit,
+              select: { id: true },
+            });
+            if (excessDiffs && excessDiffs.length > 0) {
+              await tx.diff.deleteMany({
+                where: { id: { in: excessDiffs.map((d) => d.id) } },
+              });
+            }
+          } catch {
+            // Non-critical diff retention pruning failure
+          }
         }
       }
 
-      const createdDiff = await tx.diff.create({
-        data: {
-          topicId: topic.id,
-          summary: diffSummary,
-          sourceUrls: result.sourceUrls,
-          alerted: false,
-        },
-      });
-
-      return { snapshot: current, change: createdDiff, isBaseline: false };
-    }, { isolationLevel: 'Serializable' });
+      return { snapshot: current, change: createdDiff };
+    });
 
     if (!skipAlert && change && topic.alertEnabled && topic.alertEmail) {
       try {

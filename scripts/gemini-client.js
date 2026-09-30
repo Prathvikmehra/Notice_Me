@@ -31,14 +31,27 @@ export function createGeminiClient({
   logger = console,
   model = 'gemini-2.5-flash',
 } = {}) {
-  const keyPool = (keys || parseGeminiKeys(env)).map((key, index) => ({ key, index: index + 1 }));
+  const keyPool = (keys || parseGeminiKeys(env)).map((key, index) => ({ key, index: index + 1, cooldownUntil: 0 }));
   let keyOffset = 0;
 
   async function callGemini(payload) {
     if (keyPool.length === 0) return null;
 
-    while (keyOffset < keyPool.length) {
-      const { key, index } = keyPool[keyOffset];
+    const totalKeys = keyPool.length;
+    let attempts = 0;
+    const now = Date.now();
+
+    while (attempts < totalKeys) {
+      const current = keyPool[keyOffset % totalKeys];
+      const { key, index } = current;
+
+      // Skip keys still in cooldown unless we have tried all others
+      if (current.cooldownUntil && current.cooldownUntil > now && attempts < totalKeys - 1) {
+        keyOffset = (keyOffset + 1) % totalKeys;
+        attempts++;
+        continue;
+      }
+
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
       let response;
@@ -51,13 +64,16 @@ export function createGeminiClient({
         });
       } catch (err) {
         logger.warn(`Gemini key index ${index} request failed or timed out: ${err.message}`);
-        keyOffset++;
+        keyOffset = (keyOffset + 1) % totalKeys;
+        attempts++;
         continue;
       }
 
       if (response.status === 429 || response.status === 503) {
         logger.warn(`Gemini key index ${index} rate limited (HTTP ${response.status}); rotating to next key.`);
-        keyOffset++;
+        current.cooldownUntil = Date.now() + 60_000;
+        keyOffset = (keyOffset + 1) % totalKeys;
+        attempts++;
         continue;
       }
 
@@ -66,7 +82,8 @@ export function createGeminiClient({
         data = await response.json();
       } catch {
         logger.warn(`Gemini key index ${index} returned non-JSON response.`);
-        keyOffset++;
+        keyOffset = (keyOffset + 1) % totalKeys;
+        attempts++;
         continue;
       }
 
@@ -74,13 +91,16 @@ export function createGeminiClient({
         const errMsg = String(data.error.message || '');
         if (QUOTA_ERROR.test(errMsg) || data.error.code === 429) {
           logger.warn(`Gemini key index ${index} quota exceeded: ${errMsg}; rotating.`);
-          keyOffset++;
+          current.cooldownUntil = Date.now() + 60_000;
+          keyOffset = (keyOffset + 1) % totalKeys;
+          attempts++;
           continue;
         }
         logger.warn(`Gemini API error on key index ${index}: ${errMsg}`);
         return null;
       }
 
+      current.cooldownUntil = 0;
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       return text ? text.trim() : null;
     }
