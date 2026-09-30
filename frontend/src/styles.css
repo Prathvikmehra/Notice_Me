@@ -3428,5 +3428,68 @@ h1 {
   }
 }
 
+/* Offline Placeholder Specimen Styling */
+.placeholder-disclaimer-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #FEF3C7;
+  color: #78350F;
+  border: 2px solid #F59E0B;
+  box-shadow: var(--shadow-sm);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin: 14px 0 20px;
+  font-size: 13px;
+}
+
+.disclaimer-badge {
+  background: #B45309;
+  color: var(--white);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.disclaimer-text {
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.is-placeholder-card {
+  border: 2px dashed #CBD5E1 !important;
+  background: #FAFAFA !important;
+  position: relative;
+}
+
+.is-placeholder-card:hover {
+  border-color: #94A3B8 !important;
+}
+
+.badge-placeholder {
+  background: #FEF08A !important;
+  color: #854D0E !important;
+  border-color: #CA8A04 !important;
+}
+
+.ticker-badge-placeholder {
+  background: #FEF3C7 !important;
+  color: #92400E !important;
+}
+
+.offline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #D97706;
+  display: inline-block;
+  box-shadow: 0 0 4px #D97706;
+}
+
 
 

@@ -54,13 +54,15 @@ export default function TrendingFeed({ trending = [], userTopics = [], onTrack, 
     }
   }
 
+  const hasPlaceholders = trending.some((t) => t.isPlaceholder);
+
   return (
     <div className="trending-feed">
       {/* 1. Live Breaking Radar Ticker */}
       <div className="radar-ticker-banner" role="region" aria-label="Live breaking updates ticker">
-        <div className="ticker-badge">
-          <span className="live-dot" />
-          <span>LIVE RADAR</span>
+        <div className={`ticker-badge ${hasPlaceholders ? 'ticker-badge-placeholder' : ''}`}>
+          <span className={hasPlaceholders ? 'offline-dot' : 'live-dot'} />
+          <span>{hasPlaceholders ? 'DEMO SPECIMENS' : 'LIVE RADAR'}</span>
         </div>
         <div className="ticker-track">
           <div className="ticker-inner">
@@ -85,6 +87,15 @@ export default function TrendingFeed({ trending = [], userTopics = [], onTrack, 
           Hot official notices, national entrance exams, welfare subsidies, and Supreme Court rulings.
           Click <strong>Track this notice</strong> to instantly add real-time monitoring and email alerts to your watchlist.
         </p>
+
+        {hasPlaceholders && (
+          <div className="placeholder-disclaimer-banner" role="alert">
+            <span className="disclaimer-badge">⚠️ OFFLINE DEMO SPECIMENS</span>
+            <span className="disclaimer-text">
+              Live Google Trends API connection is uninitialized or rate-limited. The items below are <strong>illustrative placeholder specimens</strong> for offline demonstration, NOT live verified notices.
+            </span>
+          </div>
+        )}
 
         {/* Filter Bar & Search */}
         <div className="trending-controls">
@@ -123,13 +134,15 @@ export default function TrendingFeed({ trending = [], userTopics = [], onTrack, 
           const followerCount = Math.max(item.followers || 0, tracked ? 1 : 0);
 
           return (
-            <article key={item.id} className="trending-card">
+            <article key={item.id} className={`trending-card ${item.isPlaceholder ? 'is-placeholder-card' : ''}`}>
               <div className="card-top-meta">
                 <div className="meta-left">
                   <span className={`trending-category-tag cat-${item.category}`}>
                     {item.category.toUpperCase()}
                   </span>
-                  <span className="trending-badge-tag">{item.badge}</span>
+                  <span className={`trending-badge-tag ${item.isPlaceholder ? 'badge-placeholder' : ''}`}>
+                    {item.badge}
+                  </span>
                 </div>
                 <span className="trending-followers-tag" title="Users tracking this notice">
                   👥 {followerCount.toLocaleString()} tracking
