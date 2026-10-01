@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
   const [copyStatus, setCopyStatus] = useState('');
@@ -99,7 +100,7 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="dossier-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="dossier-modal-container" role="dialog" aria-modal="true" aria-labelledby="dossier-title">
         {/* Screen Toolbar (hidden in print) */}
@@ -338,6 +339,7 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
           </footer>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

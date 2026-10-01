@@ -3144,52 +3144,77 @@ h1 {
    ======================================================== */
 
 @media print {
-  body {
+  html, body {
     background: #fff !important;
     color: #000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
   }
 
-  /* Hide everything on screen except dossier paper */
+  /* Hide app-shell and modal toolbar */
   .app-shell,
-  .sidebar,
-  .topbar,
   .dossier-toolbar,
+  .floating-ai-chat-btn,
   .no-print {
     display: none !important;
   }
 
+  /* Show dossier full page without overlay backdrop or fixed constraints */
   .dossier-overlay {
     position: static !important;
-    background: none !important;
+    background: transparent !important;
     padding: 0 !important;
+    margin: 0 !important;
     overflow: visible !important;
     display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    z-index: auto !important;
   }
 
   .dossier-modal-container {
+    position: static !important;
+    display: block !important;
     max-width: 100% !important;
+    width: 100% !important;
     max-height: none !important;
+    height: auto !important;
     border: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
     overflow: visible !important;
+    background: #fff !important;
   }
 
   .dossier-paper {
     padding: 0 !important;
+    margin: 0 !important;
     background: #fff !important;
+    color: #000 !important;
     overflow: visible !important;
+    box-shadow: none !important;
   }
 
   .dossier-radar-grid,
   .dossier-section,
   .dossier-action-banner,
-  .dossier-audit-card {
-    page-break-inside: avoid;
+  .dossier-audit-card,
+  .bulletin-item,
+  .deadline-item,
+  .dossier-header,
+  .dossier-footer {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   .page-break-before {
-    page-break-before: always;
+    page-break-before: always !important;
+    break-before: page !important;
   }
 }
 
