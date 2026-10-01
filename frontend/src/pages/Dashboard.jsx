@@ -27,6 +27,19 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showProModal, setShowProModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [refreshingTrending, setRefreshingTrending] = useState(false);
+
+  const handleRefreshTrending = async (force = false) => {
+    setRefreshingTrending(true);
+    try {
+      const live = await getTrendingTopics(force);
+      setTrending(live || []);
+    } catch {
+      // keep current
+    } finally {
+      setRefreshingTrending(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -367,6 +380,8 @@ export default function Dashboard() {
             userTopics={topics}
             onTrack={add}
             onSelectExisting={(id) => { setSelectedId(id); setViewMode('watchlist'); }}
+            onRefresh={handleRefreshTrending}
+            refreshing={refreshingTrending}
           />
         ) : viewMode === 'activity' ? (
           <RecentChangesFeed

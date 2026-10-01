@@ -109,6 +109,7 @@ export const BASE_TRENDING = [
 ];
 
 let cachedTrending = BASE_TRENDING.map((t) => ({ ...t, lastRefreshed: null }));
+let lastRefreshedAt = null;
 
 export function getCachedTrending() {
   return cachedTrending;
@@ -199,6 +200,8 @@ export async function refreshTrendingRadar({ client, gemini, logger = console, g
       const parsed = parseSerpTrendsToTopics(liveSearches);
       if (parsed.length > 0) {
         activeTracks = parsed;
+        cachedTrending = parsed;
+        lastRefreshedAt = new Date().toISOString();
         logger.info(`Trending Radar: Discovered ${parsed.length} live trending public notices from SerpApi.`);
       }
     } catch (err) {

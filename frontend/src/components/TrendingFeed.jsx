@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const CATEGORY_FILTERS = [
   { id: 'all', label: 'All Hot Tracks' },
@@ -9,7 +9,14 @@ const CATEGORY_FILTERS = [
   { id: 'policy', label: '📜 Public Policy' },
 ];
 
-export default function TrendingFeed({ trending = [], userTopics = [], onTrack, onSelectExisting }) {
+export default function TrendingFeed({
+  trending = [],
+  userTopics = [],
+  onTrack,
+  onSelectExisting,
+  onRefresh,
+  refreshing = false,
+}) {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [trackingId, setTrackingId] = useState(null);
@@ -56,6 +63,21 @@ export default function TrendingFeed({ trending = [], userTopics = [], onTrack, 
 
   const hasPlaceholders = trending.some((t) => t.isPlaceholder);
 
+  // Auto-poll every 3s if currently displaying placeholders until live radar data arrives
+  useEffect(() => {
+    if (!hasPlaceholders || !onRefresh) return;
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      if (!cancelled) {
+        await onRefresh(false);
+      }
+    }, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [hasPlaceholders, onRefresh]);
+
   return (
     <div className="trending-feed">
       {/* 1. Live Breaking Radar Ticker */}
@@ -81,6 +103,18 @@ export default function TrendingFeed({ trending = [], userTopics = [], onTrack, 
         <div className="trending-eyebrow">
           <span>PUBLIC INTELLIGENCE FEED</span>
           <span className="trending-stat-pill">⚡ SERPAPI + GEMINI REAL-TIME RADAR</span>
+          {onRefresh && (
+            <button
+              type="button"
+              className="button button-quiet trending-refresh-btn"
+              onClick={() => onRefresh(true)}
+              disabled={refreshing}
+              style={{ marginLeft: 'auto', fontSize: '12px', padding: '4px 12px', cursor: 'pointer' }}
+              title="Force re-fetch live trending notices from SerpApi"
+            >
+              {refreshing ? '↻ Fetching radar…' : '↻ Refresh Radar'}
+            </button>
+          )}
         </div>
         <h1>Trending Public Notices</h1>
         <p className="trending-subtitle">
@@ -92,7 +126,17 @@ export default function TrendingFeed({ trending = [], userTopics = [], onTrack, 
           <div className="placeholder-disclaimer-banner" role="alert">
             <span className="disclaimer-badge">⚠️ OFFLINE DEMO SPECIMENS</span>
             <span className="disclaimer-text">
-              Live Google Trends API connection is uninitialized or rate-limited. The items below are <strong>illustrative placeholder specimens</strong> for offline demonstration, NOT live verified notices.
+              Live Google Trends background sync is finalizing.
+              {onRefresh && (
+                <button
+                  type="button"
+                  onClick={() => onRefresh(true)}
+                  disabled={refreshing}
+                  style={{ marginLeft: '8px', textDecoration: 'underline', background: 'none', border: 'none', color: 'inherit', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  {refreshing ? 'Refreshing…' : 'Check for live data now ↗'}
+                </button>
+              )}
             </span>
           </div>
         )}
