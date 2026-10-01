@@ -141,7 +141,7 @@ export function createTopicsRouter(database = getDb) {
     // If query ?refresh=true requested, force live refresh via SerpApi Trends
     if (!isTestEnv()) {
       if (req.query?.refresh === 'true') {
-        await refreshTrendingRadar().catch(() => {});
+        refreshTrendingRadar().catch(() => {});
         trending = getCachedTrending();
       } else if (trending[0]?.lastRefreshed === null) {
         // Background warm-up

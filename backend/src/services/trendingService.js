@@ -110,6 +110,7 @@ export const BASE_TRENDING = [
 
 let cachedTrending = BASE_TRENDING.map((t) => ({ ...t, lastRefreshed: null }));
 let lastRefreshedAt = null;
+let isRefreshing = false;
 
 export function getCachedTrending() {
   return cachedTrending;
@@ -188,26 +189,33 @@ export function parseSerpTrendsToTopics(searches = []) {
  * Scheduled to run 15 minutes before 8 AM, 2 PM, and 8 PM (7:45, 13:45, 19:45 IST).
  */
 export async function refreshTrendingRadar({ client, gemini, logger = console, geo = 'IN' } = {}) {
-  const apiClient = client || createSerpApiClient();
-  const geminiClient = gemini !== undefined ? gemini : getGeminiClient();
-
-  logger.info(`Trending Radar: Checking live Google Trends via SerpApi...`);
-  let activeTracks = BASE_TRENDING;
-
-  if (typeof apiClient.googleTrendsNow === 'function') {
-    try {
-      const liveSearches = await apiClient.googleTrendsNow({ geo });
-      const parsed = parseSerpTrendsToTopics(liveSearches);
-      if (parsed.length > 0) {
-        activeTracks = parsed;
-        cachedTrending = parsed;
-        lastRefreshedAt = new Date().toISOString();
-        logger.info(`Trending Radar: Discovered ${parsed.length} live trending public notices from SerpApi.`);
-      }
-    } catch (err) {
-      logger.warn(`Trending Radar: SerpApi google_trends_trending_now failed: ${err.message}. Using baseline.`);
-    }
+  if (isRefreshing) {
+    logger.info(`Trending Radar: Refresh already in progress, skipping concurrent run.`);
+    return { inProgress: true };
   }
+  isRefreshing = true;
+
+  try {
+    const apiClient = client || createSerpApiClient();
+    const geminiClient = gemini !== undefined ? gemini : getGeminiClient();
+
+    logger.info(`Trending Radar: Checking live Google Trends via SerpApi...`);
+    let activeTracks = BASE_TRENDING;
+
+    if (typeof apiClient.googleTrendsNow === 'function') {
+      try {
+        const liveSearches = await apiClient.googleTrendsNow({ geo });
+        const parsed = parseSerpTrendsToTopics(liveSearches);
+        if (parsed.length > 0) {
+          activeTracks = parsed;
+          cachedTrending = parsed;
+          lastRefreshedAt = new Date().toISOString();
+          logger.info(`Trending Radar: Discovered ${parsed.length} live trending public notices from SerpApi.`);
+        }
+      } catch (err) {
+        logger.warn(`Trending Radar: SerpApi google_trends_trending_now failed: ${err.message}. Using baseline.`);
+      }
+    }
 
   logger.info(`Trending Radar: Starting pre-warm refresh for ${activeTracks.length} public tracks...`);
   let successCount = 0;
@@ -246,10 +254,13 @@ export async function refreshTrendingRadar({ client, gemini, logger = console, g
     }
   }
 
-  if (updatedTracks.length > 0) {
-    cachedTrending = updatedTracks;
-  }
+    if (updatedTracks.length > 0) {
+      cachedTrending = updatedTracks;
+    }
 
-  logger.info(`Trending Radar: Pre-warm completed (${successCount}/${activeTracks.length} refreshed).`);
-  return { refreshed: successCount, total: activeTracks.length };
+    logger.info(`Trending Radar: Pre-warm completed (${successCount}/${activeTracks.length} refreshed).`);
+    return { refreshed: successCount, total: activeTracks.length };
+  } finally {
+    isRefreshing = false;
+  }
 }
