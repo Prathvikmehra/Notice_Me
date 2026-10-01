@@ -1,108 +1,233 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-function renderDiffLine(line, index) {
-  if (line.includes(' → ')) {
-    const [before, after] = line.split(' → ');
-    const colonIdx = before.indexOf(': ');
-    if (colonIdx !== -1) {
-      const prefix = before.slice(0, colonIdx + 2);
-      const oldText = before.slice(colonIdx + 2);
-      return (
-        <div key={index} className="diff-line">
-          <span style={{ color: 'var(--muted)', fontWeight: 500 }}>{prefix}</span>
-          <span className="diff-old">{oldText}</span>
-          <span className="diff-arrow"> → </span>
-          <span className="diff-new">{after}</span>
-        </div>
-      );
-    }
-    return (
-      <div key={index} className="diff-line">
-        <span className="diff-old">{before}</span>
-        <span className="diff-arrow"> → </span>
-        <span className="diff-new">{after}</span>
-      </div>
-    );
+function parseStructuredChange(change) {
+  if (change?.structured && typeof change.structured === 'object') {
+    return change.structured;
   }
 
-  if (line.startsWith('New result:')) {
-    return (
-      <div key={index} className="diff-line">
-        <span style={{ color: '#166534', fontWeight: 600, marginRight: '6px' }}>+ New:</span>
-        <strong>{line.replace(/^New result:\s*/, '')}</strong>
-      </div>
-    );
+  const raw = change?.summary || '';
+  const text = String(raw).trim();
+
+  // Try JSON parse first
+  if (text.startsWith('{') && text.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed.headline === 'string') {
+        return parsed;
+      }
+    } catch {}
   }
 
-  if (line.startsWith('Removed result:')) {
-    return (
-      <div key={index} className="diff-line">
-        <span style={{ color: 'var(--seal)', fontWeight: 600, marginRight: '6px' }}>− Removed:</span>
-        <span className="diff-old">{line.replace(/^Removed result:\s*/, '')}</span>
-      </div>
-    );
+  // Fallback parsing for legacy text diffs
+  const isCritical = /deadline|last date|cancel|postpone|stay order|court order|cutoff|hall ticket|admit card|urgent|scheduled|verdict/i.test(text);
+  const isModerate = /extend|release|announced|update|fee|apply|eligibility|new result|decision|notification/i.test(text);
+  const impact = isCritical ? 'HIGH' : isModerate ? 'MEDIUM' : 'LOW';
+
+  let before = null;
+  let after = null;
+  if (text.includes(' → ')) {
+    const parts = text.split(' → ');
+    before = parts[0].replace(/^.*:\s*/, '').trim();
+    after = parts[1].split('\n')[0].trim();
   }
 
-  return <div key={index} className="diff-line">{line}</div>;
+  const evidence = (change?.sourceUrls || []).slice(0, 4).map((url) => {
+    let domain = 'source';
+    try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+    const isGov = /\.(gov|nic|ac|edu)\.in$|\.gov$|court|judicature/i.test(domain);
+    return {
+      title: `${change?.topic?.name || 'Monitored'} Source`,
+      url,
+      domain,
+      sourceType: isGov ? 'Official Portal' : 'Public Web Source',
+      excerpt: text.slice(0, 160) || 'Verified intelligence match.',
+    };
+  });
+
+  const headline = text.includes('\n')
+    ? text.split('\n')[0].replace(/^.*:\s*/, '').slice(0, 90)
+    : (text.length > 90 ? `${text.slice(0, 87)}…` : (text || 'Update Detected'));
+
+  return {
+    headline: headline || 'Update Detected',
+    explanation: text || 'Change detected in official records or web index.',
+    before,
+    after,
+    whyItMatters: isCritical
+      ? 'Directly alters critical deadlines, applicant eligibility, or administrative instructions.'
+      : 'Provides refreshed administrative updates and latest public circular records.',
+    whoIsAffected: change?.topic?.name ? `Candidates and stakeholders tracking ${change.topic.name}` : null,
+    actionRequired: isCritical ? 'Review updated timelines and verify documents on the official portal.' : null,
+    impact,
+    whyAmISeeingThis: [
+      change?.topic?.query ? `Matches monitored query: "${change.topic.query}"` : 'Matches your monitoring watchlist',
+      evidence.some((e) => e.sourceType === 'Official Portal') ? 'Verified official source publication' : 'Detected in latest search & news crawl',
+    ],
+    evidence,
+  };
 }
 
-function getDiffUrgency(summary) {
-  const text = (summary || '').toLowerCase();
-  if (/deadline|last date|cancel|postpone|stay order|court order|cutoff|hall ticket|admit card|urgent|scheduled|verdict/i.test(text)) {
-    return { label: 'CRITICAL SHIFT', level: 'critical', score: 88 };
-  }
-  if (/extend|release|announced|update|fee|apply|eligibility|new result|decision|notification/i.test(text)) {
-    return { label: 'MODERATE UPDATE', level: 'moderate', score: 58 };
-  }
-  return { label: 'ROUTINE NOTICE', level: 'routine', score: 28 };
-}
+export default function DiffCard({ change, compact = false }) {
+  const [showWhy, setShowWhy] = useState(false);
+  const [showAllSources, setShowAllSources] = useState(false);
 
-export default function DiffCard({ change }) {
+  const structured = parseStructuredChange(change);
   const date = new Date(change.detectedAt);
-  const lines = (change.summary || '').split('\n').filter(Boolean);
-  const urgency = getDiffUrgency(change.summary);
+  const formattedDate = Number.isNaN(date.getTime())
+    ? 'Recently'
+    : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const impact = structured.impact || 'MEDIUM';
+  const impactClass = impact === 'HIGH' ? 'is-high' : impact === 'MEDIUM' ? 'is-medium' : 'is-low';
+  const impactIcon = impact === 'HIGH' ? '🔴' : impact === 'MEDIUM' ? '🟠' : '🟡';
+
+  const sources = structured.evidence?.length > 0
+    ? structured.evidence
+    : (change.sourceUrls || []).map((url) => {
+      let domain = 'source';
+      try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+      return { url, domain, title: domain, sourceType: 'Web Source', excerpt: null };
+    });
+
+  const displayedSources = showAllSources ? sources : sources.slice(0, 2);
 
   return (
-    <article className="diff-card">
-      <div className="diff-topline">
+    <article className={`diff-card ${impactClass} ${compact ? 'is-compact' : ''}`}>
+      <header className="diff-topline">
         <div className="diff-topline-left">
-          <time dateTime={change.detectedAt}>
-            {Number.isNaN(date.getTime()) ? 'Unknown date' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-          </time>
-          <span className={`diff-urgency-pill urgency-${urgency.level}`}>
-            <span className="urgency-beacon" />
-            {urgency.label} • {urgency.score}%
+          <span className={`diff-impact-pill ${impactClass}`}>
+            <span className="impact-beacon" aria-hidden="true">{impactIcon}</span>
+            <span>{impact} IMPACT</span>
           </span>
+          <time className="diff-time" dateTime={change.detectedAt}>
+            {formattedDate}
+          </time>
+          {change.topic?.name && (
+            <span className="diff-topic-tag" title={change.topic.name}>
+              {change.topic.name}
+            </span>
+          )}
         </div>
-        <span className="change-badge">Material change detected</span>
-      </div>
-      <div className="diff-summary">
-        {lines.map((line, idx) => renderDiffLine(line, idx))}
-      </div>
-      {change.sourceUrls?.length > 0 && (
-        <div className="source-links">
-          <span>Sources</span>
-          {change.sourceUrls.map((url) => {
-            try {
-              const parsed = new URL(url);
-              if (!['http:', 'https:'].includes(parsed.protocol)) return null;
-              return (
-                <a
-                  href={url}
-                  key={url}
-                  className="source-link-chip"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={url}
-                >
-                  {parsed.hostname.replace(/^www\./, '')} ↗
-                </a>
-              );
-            } catch {
-              return null;
-            }
-          })}
+        <button
+          type="button"
+          className="why-toggle-btn"
+          onClick={() => setShowWhy((v) => !v)}
+          title="Why am I seeing this change?"
+          aria-expanded={showWhy}
+        >
+          <span>{showWhy ? '✕ Close rationale' : '❓ Why am I seeing this?'}</span>
+        </button>
+      </header>
+
+      {showWhy && (
+        <aside className="diff-why-card">
+          <div className="diff-why-title">Why am I seeing this?</div>
+          <ul className="diff-why-list">
+            {(structured.whyAmISeeingThis || [
+              `Matches your query preferences.`,
+              `Detected in verified public intelligence index.`
+            ]).map((reason, idx) => (
+              <li key={idx}>
+                <span className="why-check">✓</span>
+                <span>{reason}</span>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      )}
+
+      <div className="diff-body">
+        <h3 className="diff-headline">{structured.headline}</h3>
+        <p className="diff-explanation">{structured.explanation}</p>
+
+        {(structured.before || structured.after) && (
+          <div className="diff-comparison-grid">
+            <div className="diff-box diff-box-before">
+              <span className="diff-box-label">BEFORE</span>
+              <span className="diff-box-value">{structured.before || '—'}</span>
+            </div>
+            <div className="diff-comparison-arrow">→</div>
+            <div className="diff-box diff-box-after">
+              <span className="diff-box-label">AFTER</span>
+              <span className="diff-box-value">{structured.after || '—'}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="diff-meta-row">
+          {structured.whyItMatters && (
+            <div className="diff-meta-item">
+              <span className="meta-icon">💡</span>
+              <div>
+                <strong>Why it matters:</strong> {structured.whyItMatters}
+              </div>
+            </div>
+          )}
+          {structured.whoIsAffected && (
+            <div className="diff-meta-item">
+              <span className="meta-icon">👥</span>
+              <div>
+                <strong>Who is affected:</strong> {structured.whoIsAffected}
+              </div>
+            </div>
+          )}
         </div>
+
+        {structured.actionRequired && (
+          <div className="diff-action-banner">
+            <span className="action-icon">⚠️</span>
+            <div className="action-text">
+              <strong>Action Recommended:</strong> {structured.actionRequired}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {sources.length > 0 && (
+        <footer className="diff-evidence-section">
+          <div className="evidence-header">
+            <span className="evidence-label">EVIDENCE &amp; SOURCES ({sources.length})</span>
+            {sources.length > 2 && (
+              <button
+                type="button"
+                className="evidence-toggle-btn"
+                onClick={() => setShowAllSources((v) => !v)}
+              >
+                {showAllSources ? 'Show fewer' : `+${sources.length - 2} more`}
+              </button>
+            )}
+          </div>
+          <div className="evidence-list">
+            {displayedSources.map((src, idx) => (
+              <div key={idx} className="evidence-card">
+                <div className="evidence-card-top">
+                  <div className="evidence-source-info">
+                    <span className={`source-type-pill ${src.sourceType === 'Official Portal' ? 'is-official' : ''}`}>
+                      {src.sourceType || 'Source'}
+                    </span>
+                    <span className="evidence-domain">{src.domain}</span>
+                    {src.date && <span className="evidence-date">• {src.date}</span>}
+                  </div>
+                  <a
+                    href={src.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="view-source-btn"
+                    title={`Open ${src.url}`}
+                  >
+                    View Source ↗
+                  </a>
+                </div>
+                {src.title && <div className="evidence-title">{src.title}</div>}
+                {src.excerpt && (
+                  <blockquote className="evidence-excerpt">
+                    “{src.excerpt}”
+                  </blockquote>
+                )}
+              </div>
+            ))}
+          </div>
+        </footer>
       )}
     </article>
   );

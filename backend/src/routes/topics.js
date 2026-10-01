@@ -4,6 +4,7 @@ import * as alertService from '../services/alertService.js';
 import { syncTopic, isTopicSyncing } from '../services/topicSyncService.js';
 import { parseFrequencyToDays, parseFrequencyToHours } from '../services/cronService.js';
 import { getCachedTrending, refreshTrendingRadar } from '../services/trendingService.js';
+import { getGeminiClient } from '../services/geminiService.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const isAlertConfigured = alertService.isAlertConfigured;
@@ -207,6 +208,97 @@ export function createTopicsRouter(database = getDb) {
       }),
     ]);
     res.json({ topics, diffs });
+  }));
+
+  // Cross-topic recent meaningful changes feed (Priority 2: What changed since last visit?)
+  router.get('/recent-changes', attempt(async (req, res) => {
+    const limit = Math.min(50, Math.max(1, Number(req.query?.limit || 20)));
+    const client = db();
+    const diffs = await client.diff.findMany({
+      where: { topic: { userId: req.user.id } },
+      include: {
+        topic: { select: { id: true, name: true, query: true, category: true } },
+      },
+      orderBy: { detectedAt: 'desc' },
+      take: limit,
+    });
+
+    const enriched = diffs.map((d) => {
+      const parsed = alertService.parseDiffSummary(d.summary, d.topic, d.sourceUrls);
+      return {
+        id: d.id,
+        topicId: d.topicId,
+        topic: d.topic,
+        detectedAt: d.detectedAt,
+        alerted: d.alerted,
+        sourceUrls: d.sourceUrls,
+        structured: parsed,
+      };
+    });
+
+    res.json({ diffs: enriched });
+  }));
+
+  // Natural language monitor extraction (Priority 6)
+  router.post('/parse-intent', attempt(async (req, res) => {
+    const promptText = clean(req.body?.prompt);
+    if (!promptText || promptText.length < 3) {
+      throw problem(400, 'Enter at least 3 characters describing what you want to monitor.');
+    }
+    const gemini = getGeminiClient();
+    const intent = await gemini.parseNaturalLanguageTopic(promptText);
+    if (!intent) {
+      throw problem(502, 'Unable to extract monitor intent. Please use the standard fields.');
+    }
+    res.json({ intent });
+  }));
+
+  // AI chat analyst over monitored data (Priority 8)
+  router.post('/chat', attempt(async (req, res) => {
+    const question = clean(req.body?.question);
+    const topicId = req.body?.topicId ? clean(req.body.topicId) : null;
+    if (!question || question.length < 2) {
+      throw problem(400, 'Question must be at least 2 characters.');
+    }
+
+    const client = db();
+    let topic = null;
+    if (topicId) {
+      topic = await client.topic.findUnique({ where: { id: topicId } });
+      if (!topic || topic.userId !== req.user.id) {
+        throw problem(404, 'Topic not found.');
+      }
+    }
+
+    const [userTopics, diffs, snapshots] = await Promise.all([
+      client.topic.findMany({
+        where: { userId: req.user.id },
+        select: { id: true, name: true, query: true, category: true },
+      }),
+      client.diff.findMany({
+        where: topicId ? { topicId } : { topic: { userId: req.user.id } },
+        include: { topic: { select: { id: true, name: true } } },
+        orderBy: { detectedAt: 'desc' },
+        take: 15,
+      }),
+      client.snapshot.findMany({
+        where: topicId ? { topicId } : { topic: { userId: req.user.id } },
+        orderBy: { pulledAt: 'desc' },
+        take: 5,
+        select: { pulledAt: true, rawData: true },
+      }),
+    ]);
+
+    const gemini = getGeminiClient();
+    const result = await gemini.queryMonitoredChat({
+      question,
+      topic,
+      topics: userTopics,
+      diffs,
+      snapshots,
+    });
+
+    res.json(result);
   }));
 
   router.post('/', attempt(async (req, res) => {

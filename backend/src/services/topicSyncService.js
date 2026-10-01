@@ -61,12 +61,29 @@ export async function syncTopic(topicId, database = getDb, customClient = null, 
         diffSummary = diffResult.summary;
         if (gemini) {
           try {
-            const humanSummary = await gemini.generateDiffSummary(topic, {
-              previous: previous.rawData,
-              current: rawData,
-              rawSummary: diffResult.summary,
-            });
-            if (humanSummary) diffSummary = humanSummary;
+            if (typeof gemini.generateStructuredDiff === 'function') {
+              const structured = await gemini.generateStructuredDiff(topic, {
+                previous: previous.rawData,
+                current: rawData,
+                rawSummary: diffResult.summary,
+                diffResult,
+              });
+              if (structured) {
+                diffSummary = JSON.stringify(structured);
+                // Also merge any high-confidence evidence URLs into sourceUrls if valid
+                if (Array.isArray(structured.evidence)) {
+                  const evUrls = structured.evidence.map((e) => e.url).filter(Boolean);
+                  diffResult.sourceUrls = [...new Set([...diffResult.sourceUrls, ...evUrls])];
+                }
+              }
+            } else {
+              const humanSummary = await gemini.generateDiffSummary(topic, {
+                previous: previous.rawData,
+                current: rawData,
+                rawSummary: diffResult.summary,
+              });
+              if (humanSummary) diffSummary = humanSummary;
+            }
           } catch (err) {
             console.warn('Gemini diff explanation skipped:', err.message);
           }

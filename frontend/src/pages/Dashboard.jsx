@@ -8,6 +8,8 @@ import DiffCard from '../components/DiffCard.jsx';
 import Logo from '../components/Logo.jsx';
 import TopicDetail from './TopicDetail.jsx';
 import TrendingFeed from '../components/TrendingFeed.jsx';
+import RecentChangesFeed from '../components/RecentChangesFeed.jsx';
+import AIChatModal from '../components/AIChatModal.jsx';
 import ProModal from '../components/ProModal.jsx';
 
 export default function Dashboard() {
@@ -15,7 +17,7 @@ export default function Dashboard() {
   const [topics, setTopics] = useState([]);
   const [trending, setTrending] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
-  const [viewMode, setViewMode] = useState('watchlist'); // 'watchlist' | 'trending'
+  const [viewMode, setViewMode] = useState('activity'); // 'activity' | 'watchlist' | 'trending'
   const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -24,6 +26,7 @@ export default function Dashboard() {
   const [searching, setSearching] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showProModal, setShowProModal] = useState(false);
+  const [showChat, setShowChat] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -36,11 +39,17 @@ export default function Dashboard() {
       if (viewParam === 'trending' || (!param && items.length === 0)) {
         setViewMode('trending');
         setSelectedId(null);
-      } else {
+      } else if (param) {
         const matched = findTopicBySlugOrId(param, items) || items[0] || null;
         setSelectedId(matched?.id || null);
-        if (matched) setViewMode('watchlist');
-        else if (items.length === 0) setViewMode('trending');
+        setViewMode('watchlist');
+      } else if (viewParam === 'watchlist') {
+        setSelectedId(items[0]?.id || null);
+        setViewMode('watchlist');
+      } else {
+        // Default to What Changed activity digest feed
+        setViewMode('activity');
+        setSelectedId(items[0]?.id || null);
       }
     }).catch((cause) => { if (active) setError(cause.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -51,6 +60,9 @@ export default function Dashboard() {
     const url = new URL(window.location.href);
     if (viewMode === 'trending') {
       url.searchParams.set('view', 'trending');
+      url.searchParams.delete('topic');
+    } else if (viewMode === 'activity') {
+      url.searchParams.set('view', 'activity');
       url.searchParams.delete('topic');
     } else {
       url.searchParams.delete('view');
@@ -67,8 +79,18 @@ export default function Dashboard() {
   useEffect(() => {
     const onPopState = () => {
       const param = new URLSearchParams(window.location.search).get('topic');
-      const matched = findTopicBySlugOrId(param, topics);
-      if (matched) setSelectedId(matched.id);
+      const viewParam = new URLSearchParams(window.location.search).get('view');
+      if (viewParam === 'activity') {
+        setViewMode('activity');
+      } else if (viewParam === 'trending') {
+        setViewMode('trending');
+      } else {
+        const matched = findTopicBySlugOrId(param, topics);
+        if (matched) {
+          setSelectedId(matched.id);
+          setViewMode('watchlist');
+        }
+      }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -124,6 +146,7 @@ export default function Dashboard() {
   }
 
   const selected = topics.find((topic) => topic.id === selectedId);
+
   return (
     <div className="app-shell">
       {sidebarOpen && (
@@ -149,6 +172,20 @@ export default function Dashboard() {
         </div>
         <div className="sidebar-intro"><span className="live-dot" /> Live SerpApi monitoring</div>
         <div className="sidebar-nav">
+          <button
+            type="button"
+            className={`sidebar-nav-tab ${viewMode === 'activity' ? 'is-active' : ''}`}
+            onClick={() => {
+              setViewMode('activity');
+              setSidebarOpen(false);
+            }}
+          >
+            <div className="sidebar-nav-label">
+              <span className="sidebar-nav-icon">⚡</span>
+              <span>What Changed</span>
+            </div>
+            <span className="sidebar-nav-badge" style={{ background: '#FEE2E2', color: '#991B1B' }}>DIGEST</span>
+          </button>
           <button
             type="button"
             className={`sidebar-nav-tab ${viewMode === 'watchlist' ? 'is-active' : ''}`}
@@ -212,7 +249,11 @@ export default function Dashboard() {
             <span className="topbar-badge">NOTICE BOARD</span>
             <span className="topbar-divider">/</span>
             <span className="topbar-active-view">
-              {viewMode === 'trending' ? '🔥 Trending Radar' : (selected ? selected.name : 'Watchlist Overview')}
+              {viewMode === 'trending'
+                ? '🔥 Trending Radar'
+                : viewMode === 'activity'
+                ? '⚡ Intelligence Digest (What Changed)'
+                : (selected ? selected.name : 'Watchlist Overview')}
             </span>
           </div>
           <div className="topbar-search">
@@ -242,11 +283,19 @@ export default function Dashboard() {
           <div className="topbar-right">
             <button
               type="button"
+              className="button button-quiet topbar-chat-btn"
+              onClick={() => setShowChat(true)}
+              title="Ask AI Analyst"
+            >
+              🤖 Ask AI
+            </button>
+            <button
+              type="button"
               className={`plan-toggle-pill ${userPlan === 'pro' ? 'is-pro' : 'is-free'}`}
               onClick={() => setShowProModal(true)}
               title="Pro features coming soon"
             >
-              {userPlan === 'pro' ? '★ PRO' : '⚡ UPGRADE (SOON)'}
+              {userPlan === 'pro' ? '★ PRO' : '⚡ UPGRADE'}
             </button>
             <div className="user-profile-badge" title={user?.email}>
               <span className="user-avatar">{user?.email?.[0]?.toUpperCase() || 'U'}</span>
@@ -286,7 +335,7 @@ export default function Dashboard() {
                         <div
                           key={t.id}
                           className="search-topic-card"
-                          onClick={() => { setSelectedId(t.id); setQuery(''); }}
+                          onClick={() => { setSelectedId(t.id); setViewMode('watchlist'); setQuery(''); }}
                         >
                           <strong>{t.name}</strong>
                           <small>{t.query}</small>
@@ -301,9 +350,6 @@ export default function Dashboard() {
                     <div>
                       {searchResults.diffs.map((d) => (
                         <div key={d.id} style={{ marginBottom: '16px' }}>
-                          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#25503e', marginBottom: '4px' }}>
-                            Topic: {d.topic?.name || 'Unknown'}
-                          </div>
                           <DiffCard change={d} />
                         </div>
                       ))}
@@ -322,6 +368,12 @@ export default function Dashboard() {
             onTrack={add}
             onSelectExisting={(id) => { setSelectedId(id); setViewMode('watchlist'); }}
           />
+        ) : viewMode === 'activity' ? (
+          <RecentChangesFeed
+            user={user}
+            topics={topics}
+            onSelectTopic={(id) => { setSelectedId(id); setViewMode('watchlist'); }}
+          />
         ) : selected ? (
           <TopicDetail
             key={selected.id}
@@ -331,14 +383,32 @@ export default function Dashboard() {
             refreshToken={revision}
           />
         ) : (
-          <TrendingFeed
-            trending={trending}
-            userTopics={topics}
-            onTrack={add}
-            onSelectExisting={(id) => { setSelectedId(id); setViewMode('watchlist'); }}
+          <RecentChangesFeed
+            user={user}
+            topics={topics}
+            onSelectTopic={(id) => { setSelectedId(id); setViewMode('watchlist'); }}
           />
         )}
       </main>
+
+      <button
+        type="button"
+        className="floating-ai-chat-btn"
+        onClick={() => setShowChat(true)}
+        title="Ask AI Intelligence Analyst"
+      >
+        <span className="floating-bot-icon">🤖</span>
+        <span className="floating-btn-label">Ask AI Analyst</span>
+        <span className="floating-hot-dot" />
+      </button>
+
+      <AIChatModal
+        isOpen={showChat}
+        onClose={() => setShowChat(false)}
+        activeTopic={viewMode === 'watchlist' ? selected : null}
+        topics={topics}
+      />
+
       <ProModal isOpen={showProModal} onClose={() => setShowProModal(false)} />
     </div>
   );

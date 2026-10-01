@@ -381,3 +381,113 @@ test('sendAlertConfirmationEmail sends activation confirmation with topic and in
   assert.match(sentMails[1].text, /Asia\/Kolkata/);
 });
 
+
+test('parseNaturalLanguageTopic extracts structured monitoring intent', async () => {
+  const { createGeminiClient } = await import('../scripts/gemini-client.js');
+
+  // Test with mock Gemini response
+  const mockFetch = async () => ({
+    status: 200,
+    ok: true,
+    json: async () => ({
+      candidates: [{
+        content: {
+          parts: [{
+            text: JSON.stringify({
+              name: 'GATE 2027',
+              query: 'GATE 2027 application deadline eligibility exam date iitr.ac.in',
+              category: 'exam',
+              watchFocus: ['Application deadlines', 'Eligibility changes', 'Exam dates'],
+              suggestedSources: ['Official website (gate.iitk.ac.in)', 'National education news'],
+              summary: 'Watching GATE 2027 for deadline and date revisions.',
+            }),
+          }],
+        },
+      }],
+    }),
+  });
+
+  const client = createGeminiClient({
+    keys: ['test-key'],
+    fetchImpl: mockFetch,
+    logger: { warn: () => {} },
+  });
+
+  const intent = await client.parseNaturalLanguageTopic('Monitor GATE 2027. I care about application deadlines, eligibility and exam dates.');
+  assert.equal(intent.name, 'GATE 2027');
+  assert.equal(intent.category, 'exam');
+  assert.equal(intent.watchFocus.length, 3);
+  assert.match(intent.query, /GATE 2027/);
+
+  // Test offline fallback
+  const emptyClient = createGeminiClient({ keys: [], logger: { warn: () => {} } });
+  const offlineIntent = await emptyClient.parseNaturalLanguageTopic('track UPSC CSE 2026 prelims');
+  assert.equal(offlineIntent.name, 'UPSC CSE 2026 prelims');
+  assert.equal(offlineIntent.category, 'exam');
+});
+
+test('parseDiffSummary extracts rich structured before/after and impact', async () => {
+  const { parseDiffSummary } = await import('../backend/src/services/alertService.js');
+
+  const jsonSummary = JSON.stringify({
+    headline: 'Application deadline extended',
+    explanation: 'Candidate registration window extended by 7 days.',
+    before: 'January 10, 2027',
+    after: 'January 17, 2027',
+    whyItMatters: 'Applicants have one additional week to submit credentials.',
+    whoIsAffected: 'All prospective candidates',
+    actionRequired: 'Submit application before January 17',
+    impact: 'HIGH',
+    whyAmISeeingThis: ['Matches your application deadline preference', 'Detected in official notification'],
+    evidence: [{ title: 'Official Press Note', url: 'https://official.gov.in', domain: 'official.gov.in' }],
+  });
+
+  const parsed = parseDiffSummary(jsonSummary, { name: 'GATE 2027' }, ['https://official.gov.in']);
+  assert.equal(parsed.headline, 'Application deadline extended');
+  assert.equal(parsed.before, 'January 10, 2027');
+  assert.equal(parsed.after, 'January 17, 2027');
+  assert.equal(parsed.impact, 'HIGH');
+  assert.equal(parsed.whyAmISeeingThis.length, 2);
+
+  // Fallback for legacy text string with arrow
+  const textSummary = 'Snippet: Last Date: January 10 → Last Date: January 17, 2027';
+  const fallback = parseDiffSummary(textSummary, { name: 'GATE 2027' }, ['https://official.gov.in']);
+  assert.equal(fallback.before, 'January 10');
+  assert.equal(fallback.after, 'January 17, 2027');
+  assert.equal(fallback.impact, 'HIGH');
+  assert.equal(fallback.evidence[0].url, 'https://official.gov.in');
+});
+
+test('queryMonitoredChat answers questions grounded in monitored data', async () => {
+  const { createGeminiClient } = await import('../scripts/gemini-client.js');
+
+  const mockFetch = async () => ({
+    status: 200,
+    ok: true,
+    json: async () => ({
+      candidates: [{
+        content: {
+          parts: [{
+            text: 'Yes, the application deadline for GATE 2027 changed from January 10 to January 17, 2027 according to official notifications (https://gate.iitr.ac.in).',
+          }],
+        },
+      }],
+    }),
+  });
+
+  const client = createGeminiClient({
+    keys: ['test-key'],
+    fetchImpl: mockFetch,
+    logger: { warn: () => {} },
+  });
+
+  const res = await client.queryMonitoredChat({
+    question: 'Did the application deadline change?',
+    topics: [{ id: 't1', name: 'GATE 2027', query: 'gate 2027' }],
+    diffs: [{ id: 'd1', summary: 'Application deadline changed from Jan 10 to Jan 17', sourceUrls: ['https://gate.iitr.ac.in'] }],
+  });
+
+  assert.match(res.answer, /January 10 to January 17/);
+  assert.equal(res.grounded, true);
+  assert.equal(res.sources[0].url, 'https://gate.iitr.ac.in');
+});

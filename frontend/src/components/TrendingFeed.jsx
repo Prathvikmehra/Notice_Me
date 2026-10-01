@@ -131,7 +131,6 @@ export default function TrendingFeed({ trending = [], userTopics = [], onTrack, 
           const tracked = isTracking(item);
           const existing = getExistingTopic(item);
           const isBusy = trackingId === item.id;
-          const followerCount = Math.max(item.followers || 0, tracked ? 1 : 0);
 
           return (
             <article key={item.id} className={`trending-card ${item.isPlaceholder ? 'is-placeholder-card' : ''}`}>
@@ -144,9 +143,11 @@ export default function TrendingFeed({ trending = [], userTopics = [], onTrack, 
                     {item.badge}
                   </span>
                 </div>
-                <span className="trending-followers-tag" title="Users tracking this notice">
-                  👥 {followerCount.toLocaleString()} tracking
-                </span>
+                {tracked && (
+                  <span className="trending-tracked-badge" title="You are tracking this notice">
+                    ✓ IN WATCHLIST
+                  </span>
+                )}
               </div>
 
               <div className="card-body">
