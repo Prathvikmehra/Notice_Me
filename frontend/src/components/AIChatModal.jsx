@@ -1,19 +1,97 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { askMonitoredChat } from '../api/client.js';
 
-const SAMPLE_QUESTIONS = [
-  'What changed this week across my topics?',
-  'Which detected changes are High Impact?',
-  'Did any application deadlines or exam dates change?',
-  'Summarize the latest status of my watchlist.',
-];
+function renderChatMessage(text) {
+  if (!text) return null;
+  const lines = text.split('\n');
+  const elements = [];
+  let currentList = null;
+
+  function parseInline(str) {
+    if (!str) return '';
+    const parts = [];
+    const regex = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s)\]]+|\*\*([^*]+)\*\*|`([^`]+)`)/g;
+    let lastIdx = 0;
+    let match;
+    let key = 0;
+
+    while ((match = regex.exec(str)) !== null) {
+      if (match.index > lastIdx) {
+        parts.push(str.slice(lastIdx, match.index));
+      }
+      if (match[2] && match[3]) {
+        parts.push(
+          <a key={key++} href={match[3]} target="_blank" rel="noopener noreferrer" className="chat-inline-link">
+            {match[2]} ↗
+          </a>
+        );
+      } else if (match[0].startsWith('http')) {
+        parts.push(
+          <a key={key++} href={match[0]} target="_blank" rel="noopener noreferrer" className="chat-inline-link">
+            {match[0].length > 35 ? match[0].slice(0, 35) + '…' : match[0]} ↗
+          </a>
+        );
+      } else if (match[4]) {
+        parts.push(<strong key={key++}>{match[4]}</strong>);
+      } else if (match[5]) {
+        parts.push(<code key={key++} className="chat-inline-code">{match[5]}</code>);
+      }
+      lastIdx = regex.lastIndex;
+    }
+    if (lastIdx < str.length) {
+      parts.push(str.slice(lastIdx));
+    }
+    return parts.length > 0 ? parts : str;
+  }
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (currentList) {
+        elements.push(<ul key={`ul-${idx}`} className="chat-bullet-list">{currentList}</ul>);
+        currentList = null;
+      }
+      return;
+    }
+
+    if (trimmed.startsWith('### ') || trimmed.startsWith('## ') || trimmed.startsWith('# ')) {
+      if (currentList) {
+        elements.push(<ul key={`ul-${idx}`} className="chat-bullet-list">{currentList}</ul>);
+        currentList = null;
+      }
+      const title = trimmed.replace(/^#+\s*/, '');
+      elements.push(<h4 key={`h-${idx}`} className="chat-msg-heading">{parseInline(title)}</h4>);
+      return;
+    }
+
+    if (trimmed.startsWith('• ') || trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      const itemText = trimmed.replace(/^[•\-*]\s*/, '');
+      if (!currentList) currentList = [];
+      currentList.push(<li key={`li-${idx}`}>{parseInline(itemText)}</li>);
+      return;
+    }
+
+    if (currentList) {
+      elements.push(<ul key={`ul-${idx}`} className="chat-bullet-list">{currentList}</ul>);
+      currentList = null;
+    }
+
+    elements.push(<p key={`p-${idx}`} className="chat-msg-para">{parseInline(line)}</p>);
+  });
+
+  if (currentList) {
+    elements.push(<ul key={`ul-end`} className="chat-bullet-list">{currentList}</ul>);
+  }
+
+  return elements;
+}
 
 export default function AIChatModal({ isOpen, onClose, activeTopic = null, topics = [] }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
       text: activeTopic
-        ? `Hello! I am your Notice Me AI Analyst. Ask me anything about changes, deadlines, or source evidence for **${activeTopic.name}**.`
+        ? `Hello! I am your Notice Me AI Analyst. Ask me anything about changes, deadlines, or official source evidence for **${activeTopic.name}**.`
         : `Hello! I am your Notice Me AI Analyst. Ask me anything about recent shifts, deadlines, or official notices across your monitored topics.`,
       sources: [],
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -22,6 +100,20 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
+
+  const sampleQuestions = activeTopic
+    ? [
+        `What is the latest status of ${activeTopic.name}?`,
+        `Did any application deadlines or dates change?`,
+        `What actions are required for ${activeTopic.name}?`,
+        `Show me the latest official source updates.`,
+      ]
+    : [
+        'What changed this week across my topics?',
+        'Which detected changes are High Impact?',
+        'Did any application deadlines or exam dates change?',
+        'Summarize the latest status of my watchlist.',
+      ];
 
   useEffect(() => {
     if (isOpen) {
@@ -41,14 +133,21 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
     setInput('');
     setLoading(true);
 
     try {
+      const historyPayload = newMessages.slice(1, -1).slice(-6).map((m) => ({
+        role: m.role,
+        text: m.text,
+      }));
+
       const res = await askMonitoredChat({
         question: q,
         topicId: activeTopic?.id || null,
+        history: historyPayload,
       });
 
       const assistantMsg = {
@@ -101,8 +200,8 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
             <div key={i} className={`chat-message-row is-${msg.role}`}>
               <div className="chat-avatar">{msg.role === 'assistant' ? '✳' : '👤'}</div>
               <div className="chat-bubble">
-                <div className="chat-bubble-text" style={{ whiteSpace: 'pre-wrap' }}>
-                  {msg.text}
+                <div className="chat-bubble-text">
+                  {renderChatMessage(msg.text)}
                 </div>
                 {msg.sources?.length > 0 && (
                   <div className="chat-sources-block">
@@ -144,7 +243,7 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
 
         <div className="chat-quick-suggestions">
           <span className="quick-label">Suggested:</span>
-          {SAMPLE_QUESTIONS.map((sq, idx) => (
+          {sampleQuestions.map((sq, idx) => (
             <button
               key={idx}
               type="button"

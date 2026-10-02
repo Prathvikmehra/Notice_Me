@@ -42,5 +42,5 @@ export const upgradePlan = async (plan = 'pro') => (await request('/api/user/upg
 export const getTrendingTopics = async (refresh = false) => (await request(`/api/topics/trending${refresh ? '?refresh=true' : ''}`)).trending;
 export const getRecentChanges = async (limit = 20) => (await request(`/api/topics/recent-changes?limit=${limit}`)).diffs;
 export const parseMonitorIntent = async (prompt) => (await request('/api/topics/parse-intent', { method: 'POST', body: JSON.stringify({ prompt }) })).intent;
-export const askMonitoredChat = async ({ question, topicId }) => request('/api/topics/chat', { method: 'POST', body: JSON.stringify({ question, topicId }) });
+export const askMonitoredChat = async ({ question, topicId, history = [] }) => request('/api/topics/chat', { method: 'POST', body: JSON.stringify({ question, topicId, history }) });
 

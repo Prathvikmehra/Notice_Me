@@ -5182,7 +5182,57 @@ h1 {
 
 .chat-bubble-text {
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
+}
+
+.chat-bubble-text .chat-msg-para {
+  margin: 0 0 6px;
+}
+
+.chat-bubble-text .chat-msg-para:last-child {
+  margin-bottom: 0;
+}
+
+.chat-bubble-text .chat-msg-heading {
+  margin: 8px 0 4px;
+  font-size: 13px;
+  font-weight: 800;
+  color: inherit;
+}
+
+.chat-bubble-text .chat-bullet-list {
+  margin: 4px 0 8px 18px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chat-bubble-text .chat-bullet-list li {
+  line-height: 1.45;
+}
+
+.chat-bubble-text .chat-inline-code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11.5px;
+}
+
+.chat-message-row.is-user .chat-inline-code {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.chat-bubble-text .chat-inline-link {
+  color: #2563EB;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.chat-message-row.is-user .chat-inline-link {
+  color: #93C5FD;
 }
 
 .chat-sources-block {

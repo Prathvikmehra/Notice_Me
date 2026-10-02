@@ -257,6 +257,7 @@ export function createTopicsRouter(database = getDb) {
   router.post('/chat', attempt(async (req, res) => {
     const question = clean(req.body?.question);
     const topicId = req.body?.topicId ? clean(req.body.topicId) : null;
+    const history = Array.isArray(req.body?.history) ? req.body.history.slice(-8) : [];
     if (!question || question.length < 2) {
       throw problem(400, 'Question must be at least 2 characters.');
     }
@@ -283,9 +284,9 @@ export function createTopicsRouter(database = getDb) {
       }),
       client.snapshot.findMany({
         where: topicId ? { topicId } : { topic: { userId: req.user.id } },
+        include: { topic: { select: { id: true, name: true, query: true, category: true } } },
         orderBy: { pulledAt: 'desc' },
-        take: 5,
-        select: { pulledAt: true, rawData: true },
+        take: 10,
       }),
     ]);
 
@@ -296,6 +297,7 @@ export function createTopicsRouter(database = getDb) {
       topics: userTopics,
       diffs,
       snapshots,
+      history,
     });
 
     res.json(result);

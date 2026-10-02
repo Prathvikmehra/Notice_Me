@@ -500,77 +500,171 @@ Rules:
    * AI Chat Assistant over monitored data (Priority 8):
    * Strictly answers user questions using stored snapshots, diff summaries, and source evidence.
    */
-  async function queryMonitoredChat({ question, topic, topics = [], diffs = [], snapshots = [] } = {}) {
+  async function queryMonitoredChat({ question, topic, topics = [], diffs = [], snapshots = [], history = [] } = {}) {
     const q = String(question || '').trim();
     if (!q) throw new Error('Question is required.');
+
+    function parseStoredDiff(d) {
+      let structured = null;
+      const summaryStr = String(d.summary || '').trim();
+      if (summaryStr.startsWith('{') && summaryStr.endsWith('}')) {
+        try {
+          const parsed = JSON.parse(summaryStr);
+          if (parsed && (parsed.headline || parsed.explanation)) {
+            structured = parsed;
+          }
+        } catch {}
+      }
+      return {
+        id: d.id,
+        topicName: d.topic?.name || topic?.name || 'Monitored Topic',
+        detectedAt: d.detectedAt,
+        headline: structured?.headline || summaryStr.slice(0, 140),
+        before: structured?.before || null,
+        after: structured?.after || null,
+        whyItMatters: structured?.whyItMatters || null,
+        whoIsAffected: structured?.whoIsAffected || null,
+        actionRequired: structured?.actionRequired || null,
+        rawSummary: summaryStr,
+        sourceUrls: d.sourceUrls || [],
+      };
+    }
+
+    function formatSnapshot(s) {
+      const raw = s.rawData || {};
+      return {
+        topicName: s.topic?.name || topic?.name || 'Monitored Topic',
+        topicQuery: s.topic?.query || topic?.query || '',
+        pulledAt: s.pulledAt,
+        aiBriefing: raw.aiBriefing ? {
+          status: raw.aiBriefing.coreStatus,
+          urgency: raw.aiBriefing.urgency,
+          deadlines: raw.aiBriefing.deadlines,
+          actionRequired: raw.aiBriefing.actionRequired,
+        } : null,
+        overview: raw.overview?.text || null,
+        topSearchSnippets: (raw.search || []).slice(0, 5).map((item) => ({
+          title: item.title,
+          snippet: item.snippet,
+          link: item.link,
+        })),
+        topNewsBulletins: (raw.news || []).slice(0, 5).map((item) => ({
+          title: item.title,
+          source: item.source,
+          snippet: item.snippet,
+          link: item.link,
+          date: item.date,
+        })),
+      };
+    }
 
     const contextData = {
       activeTopic: topic ? { id: topic.id, name: topic.name, query: topic.query, category: topic.category } : null,
       allTopics: topics.map((t) => ({ id: t.id, name: t.name, query: t.query })),
-      recentDiffs: diffs.slice(0, 10).map((d) => ({
-        id: d.id,
-        topicName: d.topic?.name || topic?.name || 'Monitored Topic',
-        detectedAt: d.detectedAt,
-        summary: d.summary,
-        sourceUrls: d.sourceUrls,
-      })),
-      recentSnapshots: snapshots.slice(0, 4).map((s) => ({
-        pulledAt: s.pulledAt,
-        searchHeadlines: (s.rawData?.search || []).slice(0, 4).map((item) => ({ title: item.title, link: item.link })),
-        newsHeadlines: (s.rawData?.news || []).slice(0, 4).map((item) => ({ title: item.title, source: item.source, link: item.link })),
-      })),
+      recentDiffs: diffs.slice(0, 15).map(parseStoredDiff),
+      recentSnapshots: snapshots.slice(0, 8).map(formatSnapshot),
     };
 
-    if (keyPool.length === 0) {
-      // Offline rule-based answer
-      const qLower = q.toLowerCase();
-      const matchedDiff = diffs.find((d) => (d.summary || '').toLowerCase().includes(qLower));
+    function buildGroundedFallback(questionStr, ctx) {
+      const qLower = questionStr.toLowerCase();
+      // 1. Look for matching diffs
+      const matchedDiff = ctx.recentDiffs.find((d) =>
+        d.rawSummary.toLowerCase().includes(qLower) ||
+        (d.headline && d.headline.toLowerCase().includes(qLower)) ||
+        (d.topicName && d.topicName.toLowerCase().includes(qLower))
+      );
       if (matchedDiff) {
+        let text = `**${matchedDiff.topicName} Update:** ${matchedDiff.headline}\n\n`;
+        if (matchedDiff.before && matchedDiff.after) {
+          text += `• **Before:** ${matchedDiff.before}\n• **After:** ${matchedDiff.after}\n`;
+        }
+        if (matchedDiff.whyItMatters) {
+          text += `• **Why it matters:** ${matchedDiff.whyItMatters}\n`;
+        }
+        if (matchedDiff.actionRequired) {
+          text += `• **Recommended Action:** ${matchedDiff.actionRequired}\n`;
+        }
         return {
-          answer: `Based on your monitored updates: ${matchedDiff.summary}`,
+          answer: text.trim(),
           sources: (matchedDiff.sourceUrls || []).map((u) => ({ url: u })),
           grounded: true,
         };
       }
+
+      // 2. Look for matching snapshot info
+      for (const snap of ctx.recentSnapshots) {
+        const matchTopic = snap.topicName.toLowerCase().includes(qLower) || snap.topicQuery.toLowerCase().includes(qLower);
+        if (matchTopic || ctx.activeTopic) {
+          if (snap.aiBriefing?.status) {
+            return {
+              answer: `**Current Status for ${snap.topicName}:**\n${snap.aiBriefing.status}\n\n${snap.aiBriefing.actionRequired ? `• **Action Required:** ${snap.aiBriefing.actionRequired}\n` : ''}${snap.aiBriefing.deadlines?.length ? `• **Key Deadlines:** ${snap.aiBriefing.deadlines.map(d => `${d.title} (${d.date})`).join(', ')}` : ''}`.trim(),
+              sources: snap.topSearchSnippets.slice(0, 3).map((s) => ({ url: s.link })),
+              grounded: true,
+            };
+          }
+          if (snap.topNewsBulletins.length || snap.topSearchSnippets.length) {
+            const topItem = snap.topNewsBulletins[0] || snap.topSearchSnippets[0];
+            return {
+              answer: `**Latest Intelligence for ${snap.topicName}:**\n${topItem.title}${topItem.snippet ? `\n\n"${topItem.snippet}"` : ''}\n\n*No breaking changes detected yet. Continuous radar is actively monitoring official sources.*`,
+              sources: [topItem.link].filter(Boolean).map((u) => ({ url: u })),
+              grounded: true,
+            };
+          }
+        }
+      }
+
+      // 3. General overview
+      if (ctx.allTopics.length > 0) {
+        return {
+          answer: `I am actively monitoring **${ctx.allTopics.length} topic(s)** for you: ${ctx.allTopics.map(t => t.name).join(', ')}.\n\nAsk me about the status, deadlines, or recent changes for any of these notices!`,
+          sources: [],
+          grounded: true,
+        };
+      }
+
       return {
-        answer: 'Notice Me AI chat requires configured Gemini API keys to answer deep analytical questions. Current recorded updates are displayed in your timeline.',
+        answer: "I cannot find this information in your monitored topics or recorded updates.",
         sources: [],
         grounded: false,
       };
     }
 
-    const prompt = `You are Notice Me AI Analyst, an intelligent grounded copilot for monitored Indian public notices, exams, and schemes.
-Answer the user's question using ONLY the facts and updates in the Monitored Data Context.
+    if (keyPool.length === 0) {
+      return buildGroundedFallback(q, contextData);
+    }
 
-User Question: "${q}"
+    const conversationPrompt = Array.isArray(history) && history.length > 0
+      ? `Prior Conversation:\n${history.map((h) => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n')}\n\n`
+      : '';
+
+    const prompt = `You are Notice Me AI Analyst, an intelligent grounded copilot for monitored Indian public notices, exams, and schemes.
+Answer the user's question directly, accurately, and helpfully using ONLY the facts and updates in the Monitored Data Context.
+
+${conversationPrompt}User Question: "${q}"
 
 Monitored Data Context:
 ${JSON.stringify(contextData, null, 2)}
 
-Strict Grounding Rules:
-1. Answer ONLY from facts explicitly in the Monitored Data Context.
-2. If the answer is not present in the context, explicitly say:
+Strict Grounding & Answer Rules:
+1. Ground your answer in the Monitored Data Context. Utilize both the recent change diffs AND the latest snapshot search/news snippets and briefings.
+2. If there are no diffs recorded yet (initial baseline), explain the current verified status from the latest search snippets or news bulletins.
+3. If specific information (like an unannounced date or unknown detail) is not in the context, explicitly say:
    "I cannot find this information in your monitored topics or recorded updates."
-3. Highlight any relevant date changes, before → after values, or impacts.
-4. Mention the relevant topic name(s) and cite any matching source URLs.
-5. Never invent or hallucinate information.
-6. Format your answer with clean Markdown bullets or bold dates where appropriate.`;
+4. Highlight key dates, Before → After changes, and practical impacts clearly.
+5. Format your response cleanly with markdown bolding (**date / topic**), bullet lists, and section headers where appropriate.
+6. Include any relevant source URLs directly in your answer so the user can verify them.`;
 
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.2,
-        maxOutputTokens: 600,
+        maxOutputTokens: 750,
       },
     };
 
     const answerText = await callGemini(payload);
     if (!answerText) {
-      return {
-        answer: 'Temporarily unable to query AI analyst. Please review the change timeline directly.',
-        sources: [],
-        grounded: false,
-      };
+      return buildGroundedFallback(q, contextData);
     }
 
     // Extract any URLs cited or referenced
