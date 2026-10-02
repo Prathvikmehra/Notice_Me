@@ -1,5 +1,6 @@
 import React from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
+import { ThemeProvider } from './contexts/ThemeContext.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import './styles.css';
@@ -13,8 +14,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

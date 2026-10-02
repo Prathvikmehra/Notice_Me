@@ -37,6 +37,7 @@ export const updateAlertSettings = async (id, settings) => (await request(`/api/
 export const syncTopic = (id) => request(`/api/topics/${encodeURIComponent(id)}/sync`, { method: 'POST' });
 export const searchTopics = async (q) => request(`/api/topics/search?q=${encodeURIComponent(q)}`);
 export const getProfile = async () => (await request('/api/user/me'));
+export const updateProfile = async (fields) => (await request('/api/user/me', { method: 'PATCH', body: JSON.stringify(fields) })).user;
 export const upgradePlan = async (plan = 'pro') => (await request('/api/user/upgrade', { method: 'POST', body: JSON.stringify({ plan }) }));
 export const getTrendingTopics = async (refresh = false) => (await request(`/api/topics/trending${refresh ? '?refresh=true' : ''}`)).trending;
 export const getRecentChanges = async (limit = 20) => (await request(`/api/topics/recent-changes?limit=${limit}`)).diffs;

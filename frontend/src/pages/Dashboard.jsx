@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { createTopic, deleteTopic, listTopics, searchTopics, getTrendingTopics, upgradePlan } from '../api/client.js';
+import { createTopic, deleteTopic, listTopics, searchTopics, getTrendingTopics, upgradePlan, getProfile } from '../api/client.js';
 import { findTopicBySlugOrId, getTopicSlug } from '../utils/slug.js';
 import TopicForm from '../components/TopicForm.jsx';
 import TopicList from '../components/TopicList.jsx';
@@ -11,6 +11,7 @@ import TrendingFeed from '../components/TrendingFeed.jsx';
 import RecentChangesFeed from '../components/RecentChangesFeed.jsx';
 import AIChatModal from '../components/AIChatModal.jsx';
 import ProModal from '../components/ProModal.jsx';
+import ProfileModal from '../components/ProfileModal.jsx';
 
 export default function Dashboard() {
   const { signOut, user } = useAuth();
@@ -149,14 +150,39 @@ export default function Dashboard() {
   }
 
   const [userPlan, setUserPlan] = useState(user?.plan || 'free');
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
+  const [avatarUrl, setAvatarUrl] = useState(() => {
+    const userId = user?.id || 'default';
+    return localStorage.getItem(`notice_me_avatar_${userId}`) || user?.user_metadata?.avatar_url || '';
+  });
 
   useEffect(() => {
     if (user?.plan) setUserPlan(user.plan);
-  }, [user?.plan]);
+    const userId = user?.id || 'default';
+    const savedAvatar = localStorage.getItem(`notice_me_avatar_${userId}`) || user?.user_metadata?.avatar_url || '';
+    setAvatarUrl(savedAvatar);
+  }, [user]);
+
+  useEffect(() => {
+    getProfile().then((res) => {
+      if (res?.user) {
+        setUserProfile(res.user);
+        if (res.user.plan) setUserPlan(res.user.plan);
+      }
+    }).catch(() => {});
+  }, [revision]);
 
   function handleUpgradePlan() {
     setShowProModal(true);
   }
+
+  const handleProfileUpdated = ({ avatar: newAvatar, name: newName }) => {
+    if (newAvatar !== undefined) setAvatarUrl(newAvatar);
+    if (newName !== undefined) {
+      setUserProfile((prev) => ({ ...prev, name: newName }));
+    }
+  };
 
   const selected = topics.find((topic) => topic.id === selectedId);
 
@@ -310,10 +336,23 @@ export default function Dashboard() {
             >
               {userPlan === 'pro' ? '★ PRO' : '⚡ UPGRADE'}
             </button>
-            <div className="user-profile-badge" title={user?.email}>
-              <span className="user-avatar">{user?.email?.[0]?.toUpperCase() || 'U'}</span>
-              <span className="user-email-text">{user?.email}</span>
-            </div>
+            <button
+              type="button"
+              className="topbar-avatar-btn"
+              onClick={() => setShowProfileModal(true)}
+              title={`Profile & Settings: ${userProfile?.name || user?.user_metadata?.name || 'Account'}`}
+              aria-label="Open profile and settings"
+            >
+              {avatarUrl?.startsWith('data:image') || avatarUrl?.startsWith('http') ? (
+                <img src={avatarUrl} alt="Profile" className="topbar-avatar-img" />
+              ) : avatarUrl ? (
+                <span className="topbar-avatar-icon">{avatarUrl}</span>
+              ) : (
+                <span className="user-avatar">
+                  {(userProfile?.name?.trim()?.[0] || user?.user_metadata?.name?.trim()?.[0] || user?.email?.[0] || 'U').toUpperCase()}
+                </span>
+              )}
+            </button>
             <button type="button" className="button button-quiet topbar-btn" onClick={() => setRevision((value) => value + 1)} title="Refresh data">↻ Refresh</button>
             <button type="button" className="button button-quiet topbar-btn" onClick={signOut} title="Sign out">Sign out</button>
           </div>
@@ -425,6 +464,12 @@ export default function Dashboard() {
       />
 
       <ProModal isOpen={showProModal} onClose={() => setShowProModal(false)} />
+      <ProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        userProfile={{ ...userProfile, plan: userPlan, topicCount: topics.length }}
+        onProfileUpdated={handleProfileUpdated}
+      />
     </div>
   );
 }
