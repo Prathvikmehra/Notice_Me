@@ -1,12 +1,21 @@
 import React, { useState, useEffect } from 'react';
+import {
+  IconRadio,
+  IconRefresh,
+  IconCheck,
+  IconExternalLink,
+  IconPlus,
+  IconSearch,
+  IconAlertTriangle,
+} from './Icons.jsx';
 
 const CATEGORY_FILTERS = [
-  { id: 'all', label: 'All Hot Tracks' },
-  { id: 'exam', label: '🎓 Exams & Admissions' },
-  { id: 'scheme', label: '🌾 Govt Schemes' },
-  { id: 'case', label: '⚖️ Court & Legal' },
-  { id: 'recruitment', label: '🎖️ Recruitment' },
-  { id: 'policy', label: '📜 Public Policy' },
+  { id: 'all', label: 'All Public Tracks' },
+  { id: 'exam', label: 'Exams & Admissions' },
+  { id: 'scheme', label: 'Govt Schemes' },
+  { id: 'case', label: 'Court & Legal' },
+  { id: 'recruitment', label: 'Recruitment' },
+  { id: 'policy', label: 'Public Policy' },
 ];
 
 export default function TrendingFeed({
@@ -84,14 +93,14 @@ export default function TrendingFeed({
       <div className="radar-ticker-banner" role="region" aria-label="Live breaking updates ticker">
         <div className={`ticker-badge ${hasPlaceholders ? 'ticker-badge-placeholder' : ''}`}>
           <span className={hasPlaceholders ? 'offline-dot' : 'live-dot'} />
-          <span>{hasPlaceholders ? 'DEMO SPECIMENS' : 'LIVE RADAR'}</span>
+          <span>{hasPlaceholders ? 'DEMO SPECIMENS' : 'RADAR RADIAL'}</span>
         </div>
         <div className="ticker-track">
           <div className="ticker-inner">
             {trending.map((item, idx) => (
               <span key={idx} className="ticker-item">
                 <strong>{item.name}:</strong> “{item.headline.slice(0, 75)}…”
-                <span className="ticker-sep">✦</span>
+                <span className="ticker-sep">•</span>
               </span>
             ))}
           </div>
@@ -101,38 +110,39 @@ export default function TrendingFeed({
       {/* 2. Editorial Header */}
       <div className="trending-header">
         <div className="trending-eyebrow">
-          <span>PUBLIC INTELLIGENCE FEED</span>
-          <span className="trending-stat-pill">⚡ SERPAPI + GEMINI REAL-TIME RADAR</span>
+          <span className="section-label">PUBLIC RADAR FEED</span>
+          <span className="trending-stat-pill">SERPAPI &amp; GEMINI LIVE RADAR</span>
           {onRefresh && (
             <button
               type="button"
               className="button button-quiet trending-refresh-btn"
               onClick={() => onRefresh(true)}
               disabled={refreshing}
-              style={{ marginLeft: 'auto', fontSize: '12px', padding: '4px 12px', cursor: 'pointer' }}
+              style={{ marginLeft: 'auto', fontSize: '12px', padding: '4px 12px' }}
               title="Force re-fetch live trending notices from SerpApi"
             >
-              {refreshing ? '↻ Fetching radar…' : '↻ Refresh Radar'}
+              <IconRefresh size={13} className={refreshing ? 'spin-icon' : ''} />
+              <span>{refreshing ? 'Fetching radar…' : 'Refresh Radar'}</span>
             </button>
           )}
         </div>
         <h1>Trending Public Notices</h1>
         <p className="trending-subtitle">
-          Hot official notices, national entrance exams, welfare subsidies, and Supreme Court rulings.
-          Click <strong>Track this notice</strong> to instantly add real-time monitoring and email alerts to your watchlist.
+          Verified official notices, entrance examinations, welfare disbursements, and judicial rulings.
+          Click <strong>Track Notice</strong> to enroll the topic in stateful monitoring and automated email delivery.
         </p>
 
         {hasPlaceholders && (
           <div className="placeholder-disclaimer-banner" role="alert">
-            <span className="disclaimer-badge">⚠️ OFFLINE DEMO SPECIMENS</span>
+            <IconAlertTriangle size={15} />
             <span className="disclaimer-text">
-              Live Google Trends background sync is finalizing.
+              Live Google Trends sync is finalizing in background.
               {onRefresh && (
                 <button
                   type="button"
                   onClick={() => onRefresh(true)}
                   disabled={refreshing}
-                  style={{ marginLeft: '8px', textDecoration: 'underline', background: 'none', border: 'none', color: 'inherit', fontWeight: 'bold', cursor: 'pointer' }}
+                  style={{ marginLeft: '8px', textDecoration: 'underline', background: 'none', border: 'none', color: 'inherit', fontWeight: 600, cursor: 'pointer' }}
                 >
                   {refreshing ? 'Refreshing…' : 'Check for live data now ↗'}
                 </button>
@@ -151,8 +161,8 @@ export default function TrendingFeed({
                 className={`filter-pill ${filter === cat.id ? 'is-active' : ''}`}
                 onClick={() => setFilter(cat.id)}
               >
-                {cat.label}
-                {cat.id === 'all' && <span className="pill-count">{trending.length}</span>}
+                <span>{cat.label}</span>
+                {cat.id === 'all' && <span className="pill-count">({trending.length})</span>}
               </button>
             ))}
           </div>
@@ -160,7 +170,7 @@ export default function TrendingFeed({
           <div className="trending-search-wrap">
             <input
               type="search"
-              placeholder="Filter hot notices…"
+              placeholder="Filter notices…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="trending-search-input"
@@ -189,7 +199,8 @@ export default function TrendingFeed({
                 </div>
                 {tracked && (
                   <span className="trending-tracked-badge" title="You are tracking this notice">
-                    ✓ IN WATCHLIST
+                    <IconCheck size={11} style={{ marginRight: '3px' }} />
+                    IN WATCHLIST
                   </span>
                 )}
               </div>
@@ -204,11 +215,11 @@ export default function TrendingFeed({
 
               <div className="card-source-bar">
                 <div className="source-info">
-                  <span className="source-label">OFFICIAL SOURCE:</span>
+                  <span className="source-label">OFFICIAL PORTAL:</span>
                   <span className="source-domain">{item.officialSource}</span>
                 </div>
                 <div className="query-info">
-                  <span className="source-label">RADAR QUERY:</span>
+                  <span className="source-label">INDEXED QUERY:</span>
                   <span className="query-snippet">“{item.query}”</span>
                 </div>
               </div>
@@ -216,14 +227,18 @@ export default function TrendingFeed({
               <div className="card-footer">
                 {tracked ? (
                   <div className="tracked-status-row">
-                    <span className="tracked-check">✓ Added to your watchlist</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <IconCheck size={14} />
+                      <span>Tracking active</span>
+                    </span>
                     {existing && (
                       <button
                         type="button"
                         className="button button-quiet view-intel-btn"
                         onClick={() => onSelectExisting(existing.id)}
                       >
-                        View Intelligence ↗
+                        <span>View Intel</span>
+                        <IconExternalLink size={12} />
                       </button>
                     )}
                   </div>
@@ -234,7 +249,8 @@ export default function TrendingFeed({
                     disabled={isBusy}
                     onClick={() => handleTrack(item)}
                   >
-                    {isBusy ? '⚡ Initializing Radar…' : '⚡ Track this Notice (1-Click)'}
+                    <IconPlus size={14} />
+                    <span>{isBusy ? 'Setting Up Monitor…' : 'Track Notice'}</span>
                   </button>
                 )}
               </div>
@@ -245,9 +261,21 @@ export default function TrendingFeed({
 
       {filtered.length === 0 && (
         <div className="empty-state" style={{ marginTop: '40px' }}>
-          <span aria-hidden="true">📡</span>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            background: 'var(--bg-surface-elevated)',
+            color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '10px'
+          }}>
+            <IconRadio size={20} />
+          </div>
           <h3>No matching notices</h3>
-          <p>Try selecting another category or clearing your filter term.</p>
+          <p>Try selecting another category or clearing your search term.</p>
         </div>
       )}
     </div>

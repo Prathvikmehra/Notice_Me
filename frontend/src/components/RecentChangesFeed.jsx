@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import DiffCard from './DiffCard.jsx';
 import { getRecentChanges } from '../api/client.js';
+import {
+  IconShield,
+  IconExternalLink,
+  IconRadio,
+  IconTag,
+} from './Icons.jsx';
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -51,7 +57,7 @@ export default function RecentChangesFeed({ user, topics = [], onSelectTopic }) 
           <p className="activity-subtitle">
             {diffs.length > 0 ? (
               <>
-                <strong>{diffs.length} meaningful {diffs.length === 1 ? 'change' : 'changes'}</strong> detected across your {topics.length} active {topics.length === 1 ? 'monitor' : 'monitors'}.
+                <strong>{diffs.length} material {diffs.length === 1 ? 'change' : 'changes'}</strong> detected across your {topics.length} active {topics.length === 1 ? 'monitor' : 'monitors'}.
               </>
             ) : (
               `All ${topics.length} monitors up to date. No new material shifts detected.`
@@ -68,7 +74,7 @@ export default function RecentChangesFeed({ user, topics = [], onSelectTopic }) 
           <div className="activity-stat-card is-medium">
             <span className="stat-label">MODERATE</span>
             <span className="stat-value">{mediumCount}</span>
-            <span className="stat-desc">Releases / Circulars</span>
+            <span className="stat-desc">Releases / Orders</span>
           </div>
           <div className="activity-stat-card is-monitors">
             <span className="stat-label">MONITORS</span>
@@ -92,14 +98,14 @@ export default function RecentChangesFeed({ user, topics = [], onSelectTopic }) 
             className={`feed-pill is-high ${filter === 'HIGH' ? 'is-active' : ''}`}
             onClick={() => setFilter('HIGH')}
           >
-            🔴 High Impact ({highCount})
+            High Impact ({highCount})
           </button>
           <button
             type="button"
             className={`feed-pill is-medium ${filter === 'MEDIUM' ? 'is-active' : ''}`}
             onClick={() => setFilter('MEDIUM')}
           >
-            🟠 Moderate ({mediumCount})
+            Moderate ({mediumCount})
           </button>
           {lowCount > 0 && (
             <button
@@ -107,7 +113,7 @@ export default function RecentChangesFeed({ user, topics = [], onSelectTopic }) 
               className={`feed-pill is-low ${filter === 'LOW' ? 'is-active' : ''}`}
               onClick={() => setFilter('LOW')}
             >
-              🟡 Low Impact ({lowCount})
+              Routine ({lowCount})
             </button>
           )}
         </div>
@@ -121,10 +127,22 @@ export default function RecentChangesFeed({ user, topics = [], onSelectTopic }) 
         </div>
       ) : diffs.length === 0 ? (
         <div className="empty-state" style={{ marginTop: '24px' }}>
-          <span aria-hidden="true" style={{ fontSize: '36px' }}>🛡️</span>
+          <div style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            background: 'var(--bg-surface-elevated)',
+            color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '12px'
+          }}>
+            <IconShield size={24} />
+          </div>
           <h3>All monitors steady — no changes detected</h3>
           <p>
-            Notice Me watches Google Search & News continuously. When an official announcement, date extension, or court order appears, the verified AI breakdown will be highlighted here.
+            Notice Me watches Google Search &amp; News continuously. When an official announcement, date extension, or court order appears, the verified AI breakdown will be highlighted here.
           </p>
         </div>
       ) : filteredDiffs.length === 0 ? (
@@ -139,7 +157,7 @@ export default function RecentChangesFeed({ user, topics = [], onSelectTopic }) 
           {filteredDiffs.map((d) => (
             <div key={d.id} className="activity-diff-wrapper">
               <div className="activity-topic-banner">
-                <span className="topic-pin-icon">📌</span>
+                <IconTag size={13} style={{ color: 'var(--text-muted)' }} />
                 <span className="topic-banner-name">{d.topic?.name || 'Monitored Topic'}</span>
                 <span className="topic-banner-category">{d.topic?.category || 'General'}</span>
                 {onSelectTopic && d.topic?.id && (
@@ -148,7 +166,8 @@ export default function RecentChangesFeed({ user, topics = [], onSelectTopic }) 
                     className="view-topic-link"
                     onClick={() => onSelectTopic(d.topic.id)}
                   >
-                    Open Topic Detail ↗
+                    <span>Inspect Monitor</span>
+                    <IconExternalLink size={12} />
                   </button>
                 )}
               </div>
