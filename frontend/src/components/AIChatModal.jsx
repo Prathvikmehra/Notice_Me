@@ -1,5 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { askMonitoredChat } from '../api/client.js';
+import {
+  IconSparkles,
+  IconX,
+  IconSend,
+  IconExternalLink,
+  IconUser,
+  IconShield,
+} from './Icons.jsx';
 
 function renderChatMessage(text) {
   if (!text) return null;
@@ -177,7 +185,9 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
       <div className="chat-modal-window" onClick={(e) => e.stopPropagation()}>
         <header className="chat-modal-header">
           <div className="chat-header-title">
-            <span className="chat-bot-icon">🤖</span>
+            <span className="chat-bot-icon">
+              <IconSparkles size={16} />
+            </span>
             <div>
               <h3>AI Intelligence Analyst</h3>
               <p className="chat-sub">
@@ -186,19 +196,21 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
             </div>
           </div>
           <button type="button" className="chat-close-btn" onClick={onClose} aria-label="Close chat">
-            ✕
+            <IconX size={16} />
           </button>
         </header>
 
         <div className="chat-grounding-banner">
-          <span className="ground-dot" />
+          <IconShield size={13} style={{ color: 'var(--status-verified-dot)', flexShrink: 0 }} />
           <span>Strictly grounded: Answers only from verified database snapshots and diffs. Zero hallucinations.</span>
         </div>
 
         <div className="chat-messages-scroll">
           {messages.map((msg, i) => (
             <div key={i} className={`chat-message-row is-${msg.role}`}>
-              <div className="chat-avatar">{msg.role === 'assistant' ? '✳' : '👤'}</div>
+              <div className="chat-avatar">
+                {msg.role === 'assistant' ? <IconSparkles size={13} /> : <IconUser size={13} />}
+              </div>
               <div className="chat-bubble">
                 <div className="chat-bubble-text">
                   {renderChatMessage(msg.text)}
@@ -215,7 +227,8 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
                           rel="noopener noreferrer"
                           className="chat-source-chip"
                         >
-                          {s.domain || 'Source'} ↗
+                          <span>{s.domain || 'Source'}</span>
+                          <IconExternalLink size={10} />
                         </a>
                       ))}
                     </div>
@@ -227,12 +240,12 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
           ))}
           {loading && (
             <div className="chat-message-row is-assistant">
-              <div className="chat-avatar">✳</div>
+              <div className="chat-avatar"><IconSparkles size={13} /></div>
               <div className="chat-bubble is-loading">
                 <span className="chat-typing-dot" />
                 <span className="chat-typing-dot" />
                 <span className="chat-typing-dot" />
-                <span style={{ marginLeft: '8px', fontSize: '13px', color: '#64748B' }}>
+                <span style={{ marginLeft: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>
                   Analyzing verified snapshots…
                 </span>
               </div>
@@ -273,7 +286,8 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
             className="button button-primary chat-send-btn"
             disabled={loading || !input.trim()}
           >
-            Send ↗
+            <IconSend size={13} />
+            <span>Send</span>
           </button>
         </form>
       </div>

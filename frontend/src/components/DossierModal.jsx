@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import {
+  IconShield,
+  IconCopy,
+  IconPrinter,
+  IconExternalLink,
+  IconCheck,
+  IconX,
+} from './Icons.jsx';
 
 export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
   const [copyStatus, setCopyStatus] = useState('');
@@ -106,7 +114,7 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
         {/* Screen Toolbar (hidden in print) */}
         <div className="dossier-toolbar no-print">
           <div className="dossier-toolbar-title">
-            <span className="dossier-emblem">✳</span>
+            <IconShield size={16} style={{ color: 'var(--brand-primary)' }} />
             <span>EXECUTIVE INTELLIGENCE DOSSIER</span>
           </div>
           <div className="dossier-toolbar-actions">
@@ -116,7 +124,8 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
               onClick={handleCopyShareLink}
               title="Copy shareable URL to clipboard"
             >
-              {copyStatus === 'link' ? '✓ Link Copied' : '🔗 Copy Link'}
+              {copyStatus === 'link' ? <IconCheck size={13} /> : <IconExternalLink size={13} />}
+              <span>{copyStatus === 'link' ? 'Link Copied' : 'Share Link'}</span>
             </button>
             <button
               type="button"
@@ -124,7 +133,8 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
               onClick={handleCopyMarkdown}
               title="Copy formatted markdown report"
             >
-              {copyStatus === 'markdown' ? '✓ Copied Markdown' : '📋 Copy Markdown'}
+              {copyStatus === 'markdown' ? <IconCheck size={13} /> : <IconCopy size={13} />}
+              <span>{copyStatus === 'markdown' ? 'Copied MD' : 'Copy Markdown'}</span>
             </button>
             <button
               type="button"
@@ -132,7 +142,8 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
               onClick={handlePrint}
               title="Print document or save as PDF"
             >
-              🖨️ Print / Save PDF
+              <IconPrinter size={14} />
+              <span>Print / Save PDF</span>
             </button>
             <button
               type="button"
@@ -140,7 +151,7 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
               onClick={onClose}
               aria-label="Close dossier"
             >
-              ✕
+              <IconX size={16} />
             </button>
           </div>
         </div>
@@ -150,10 +161,10 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
           <header className="dossier-header">
             <div className="dossier-header-top">
               <div className="dossier-brand-row">
-                <span className="dossier-watermark-symbol">✳</span>
+                <IconShield size={24} style={{ color: 'var(--brand-primary)' }} />
                 <div>
                   <div className="dossier-org">NOTICE ME INTELLIGENCE SYSTEM</div>
-                  <div className="dossier-classification">AUTONOMOUS RADAR • VERIFIED CRYPTO AUDIT</div>
+                  <div className="dossier-classification">AUTONOMOUS RADAR • VERIFIED CHANGE AUDIT</div>
                 </div>
               </div>
               <div className="dossier-meta-badge">
@@ -176,7 +187,7 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
             <div className="dossier-radar-card">
               <div className="dossier-section-eyebrow">URGENCY CLASSIFICATION</div>
               <div className={`dossier-urgency-banner urgency-${urgency.toLowerCase()}`}>
-                <span className="urgency-beacon" />
+                <span className="live-dot" style={{ width: '7px', height: '7px' }} />
                 <span>{urgency} ACTION REQUIRED</span>
               </div>
             </div>
@@ -198,55 +209,53 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
             </div>
           </section>
 
-          {/* Action Required Callout if present */}
-          {briefing.actionRequired && (
-            <div className="dossier-action-banner">
-              <div className="dossier-action-label">⚡ DIRECT ACTION DIRECTIVE</div>
-              <p className="dossier-action-text">{briefing.actionRequired}</p>
-            </div>
-          )}
-
-          {/* Executive Verified Status */}
+          {/* Executive Summary */}
           <section className="dossier-section">
-            <div className="dossier-section-heading">
-              <span className="section-num">01</span>
-              <h2>CURRENT VERIFIED EXECUTIVE STATUS</h2>
-            </div>
-            <div className="dossier-summary-content">
+            <h2 className="dossier-section-heading">1. Verified Status Overview</h2>
+            <div className="dossier-summary-box">
               <p>{briefing.coreStatus}</p>
+              {briefing.primarySource && (
+                <div className="dossier-primary-source">
+                  <span>Primary Portal Citation: </span>
+                  <a href={briefing.primarySource.link} target="_blank" rel="noopener noreferrer">
+                    {briefing.primarySource.name} ↗
+                  </a>
+                </div>
+              )}
             </div>
           </section>
 
-          {/* Detected Deadlines & Milestones */}
+          {/* Action Required Callout if present */}
+          {briefing.actionRequired && (
+            <section className="dossier-section">
+              <h2 className="dossier-section-heading">2. Recommended Action</h2>
+              <div className="dossier-action-callout">
+                <p><strong>Immediate Action: </strong>{briefing.actionRequired}</p>
+              </div>
+            </section>
+          )}
+
+          {/* Key Dates & Deadlines */}
           {Array.isArray(briefing.deadlines) && briefing.deadlines.length > 0 && (
             <section className="dossier-section">
-              <div className="dossier-section-heading">
-                <span className="section-num">02</span>
-                <h2>IMPENDING DEADLINES & MILESTONES</h2>
-              </div>
-              <div className="dossier-table-wrap">
-                <table className="dossier-table">
-                  <thead>
-                    <tr>
-                      <th>URGENCY</th>
-                      <th>MILESTONE EVENT</th>
-                      <th>VERIFIED DATE</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {briefing.deadlines.map((dl, idx) => (
-                      <tr key={idx}>
-                        <td>
-                          <span className={`table-urgency-pill pill-${(dl.urgency || 'medium').toLowerCase()}`}>
-                            {dl.urgency || 'KEY DATE'}
-                          </span>
-                        </td>
-                        <td><strong>{dl.title}</strong></td>
-                        <td><code>{dl.date}</code></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <h2 className="dossier-section-heading">
+                {briefing.actionRequired ? '3. Detected Deadlines & Milestones' : '2. Detected Deadlines & Milestones'}
+              </h2>
+              <div className="dossier-deadlines-table">
+                <div className="table-header-row">
+                  <span>Urgency</span>
+                  <span>Event / Milestone</span>
+                  <span>Scheduled Date</span>
+                </div>
+                {briefing.deadlines.map((dl, idx) => (
+                  <div key={idx} className="table-data-row">
+                    <span className={`table-urgency-cell urgency-${(dl.urgency || 'medium').toLowerCase()}`}>
+                      {dl.urgency || 'KEY DATE'}
+                    </span>
+                    <span className="table-event-cell">{dl.title}</span>
+                    <span className="table-date-cell">{dl.date}</span>
+                  </div>
+                ))}
               </div>
             </section>
           )}
@@ -254,44 +263,57 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
           {/* Key Verified Highlights */}
           {Array.isArray(briefing.keyPoints) && briefing.keyPoints.length > 0 && (
             <section className="dossier-section">
-              <div className="dossier-section-heading">
-                <span className="section-num">03</span>
-                <h2>KEY INTELLIGENCE HIGHLIGHTS</h2>
-              </div>
+              <h2 className="dossier-section-heading">Key Verified Highlights</h2>
               <ul className="dossier-highlights-list">
-                {briefing.keyPoints.map((pt, idx) => (
-                  <li key={idx} className="dossier-highlight-item">
-                    <span className="dossier-item-badge">{pt.badge}</span>
-                    <span className="dossier-item-text">{pt.text}</span>
+                {briefing.keyPoints.map((kp, idx) => (
+                  <li key={idx}>
+                    <span className="dossier-badge-pill">{kp.badge}</span>
+                    <span className="dossier-highlight-text">{kp.text}</span>
                   </li>
                 ))}
               </ul>
             </section>
           )}
 
-          {/* Chronological Audit Trail (Diffs) */}
+          {/* Recent Chronological Changes */}
           {Array.isArray(diffs) && diffs.length > 0 && (
-            <section className="dossier-section page-break-before">
-              <div className="dossier-section-heading">
-                <span className="section-num">04</span>
-                <h2>CHRONOLOGICAL CHANGE AUDIT TRAIL</h2>
-              </div>
-              <div className="dossier-audit-timeline">
+            <section className="dossier-section">
+              <h2 className="dossier-section-heading">Chronological Change Audit Trail</h2>
+              <div className="dossier-diffs-timeline">
                 {diffs.slice(0, 5).map((d) => {
                   const dDate = new Date(d.detectedAt).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
                     year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
                   });
                   return (
-                    <div key={d.id} className="dossier-audit-card">
-                      <div className="audit-card-meta">
-                        <span className="audit-card-date">{dDate}</span>
-                        <span className="audit-card-badge">VERIFIED DELTA</span>
+                    <div key={d.id} className="dossier-diff-item">
+                      <div className="dossier-diff-meta">
+                        <span className="dossier-diff-date">{dDate}</span>
+                        {d.structured?.impact && (
+                          <span className={`dossier-diff-impact impact-${d.structured.impact.toLowerCase()}`}>
+                            {d.structured.impact}
+                          </span>
+                        )}
                       </div>
-                      <div className="audit-card-summary">{d.summary}</div>
+                      <div className="dossier-diff-summary">
+                        <strong>{d.structured?.headline || d.summary?.split('\n')[0] || 'Update Detected'}</strong>
+                        <p>{d.structured?.explanation || d.summary}</p>
+                      </div>
+                      {d.sourceUrls?.length > 0 && (
+                        <div className="dossier-diff-sources">
+                          <span>Evidence: </span>
+                          {d.sourceUrls.slice(0, 2).map((url, uidx) => {
+                            let domain = 'source';
+                            try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+                            return (
+                              <a key={uidx} href={url} target="_blank" rel="noopener noreferrer">
+                                {domain}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -299,26 +321,23 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
             </section>
           )}
 
-          {/* Citations and Sources */}
-          {Array.isArray(briefing.bulletins) && briefing.bulletins.length > 0 && (
+          {/* Citations & Media Bulletins */}
+          {briefing.bulletins?.length > 0 && (
             <section className="dossier-section">
-              <div className="dossier-section-heading">
-                <span className="section-num">05</span>
-                <h2>PRIMARY CITATIONS & DISPATCH SOURCES</h2>
-              </div>
-              <div className="dossier-citations-list">
+              <h2 className="dossier-section-heading">Citations & Primary Evidence</h2>
+              <div className="dossier-sources-grid">
                 {briefing.bulletins.map((b, idx) => (
-                  <div key={idx} className="citation-entry">
-                    <span className="citation-num">[{idx + 1}]</span>
-                    <div className="citation-body">
-                      <strong>{b.title}</strong>
-                      <div className="citation-meta">
-                        <span>{b.source}</span>
-                        {b.date && <span>• {b.date}</span>}
-                        <a href={b.link} target="_blank" rel="noopener noreferrer" className="citation-link">
-                          {b.link}
-                        </a>
-                      </div>
+                  <div key={idx} className="dossier-source-card">
+                    <div className="dossier-source-card-top">
+                      <span className="dossier-source-type">{b.type}</span>
+                      {b.date && <span className="dossier-source-date">{b.date}</span>}
+                    </div>
+                    <div className="dossier-source-title">{b.title}</div>
+                    <div className="dossier-source-footer">
+                      <span>{b.source}</span>
+                      <a href={b.link} target="_blank" rel="noopener noreferrer">
+                        Verify Record ↗
+                      </a>
                     </div>
                   </div>
                 ))}
@@ -326,15 +345,15 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
             </section>
           )}
 
-          {/* Official Verification Footer */}
+          {/* Dossier Footer / Authenticity Seal */}
           <footer className="dossier-footer">
-            <div className="dossier-footer-left">
-              <span className="dossier-footer-stamp">NOTICE ME RADAR • OFFICIAL INTEL</span>
-              <p>Autonomous monitoring powered by SerpApi Google Search & News with Google Gemini AI synthesis.</p>
+            <div className="dossier-seal-block">
+              <div className="seal-line">OFFICIAL RECORD MEMO • AUTONOMOUS INTELLIGENCE BRIEFING</div>
+              <div className="seal-sub">Verified against official Google Search and News records via SerpApi + Gemini.</div>
             </div>
-            <div className="dossier-footer-right">
-              <div className="dossier-hash">INTEGRITY ID: {topic.id}</div>
-              <div className="dossier-hash-date">STAMPED {new Date().toISOString()}</div>
+            <div className="dossier-page-meta">
+              <span>Notice Me Document ID: {topic.id}</span>
+              <span>Generated: {nowStr}</span>
             </div>
           </footer>
         </div>
