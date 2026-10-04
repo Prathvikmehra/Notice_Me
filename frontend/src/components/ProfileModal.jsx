@@ -3,14 +3,24 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { useTheme } from '../contexts/ThemeContext.jsx';
 import { supabase } from '../lib/supabase.js';
 import { updateProfile } from '../api/client.js';
+import {
+  IconUser,
+  IconSun,
+  IconMoon,
+  IconShield,
+  IconX,
+  IconCheck,
+} from './Icons.jsx';
 
 const PRESET_AVATARS = [
-  { id: 'radar', icon: '👁️', label: 'Radar' },
-  { id: 'gazette', icon: '📰', label: 'Gazette' },
-  { id: 'spark', icon: '⚡', label: 'Spark' },
   { id: 'owl', icon: '🦉', label: 'Watcher' },
+  { id: 'gazette', icon: '📰', label: 'Gazette' },
+  { id: 'institution', icon: '🏛️', label: 'Civic' },
+  { id: 'justice', icon: '⚖️', label: 'Compliance' },
   { id: 'scholar', icon: '🎓', label: 'Scholar' },
-  { id: 'shield', icon: '🛡️', label: 'Sentinel' },
+  { id: 'sentinel', icon: '🛡️', label: 'Sentinel' },
+  { id: 'executive', icon: '💼', label: 'Executive' },
+  { id: 'investigator', icon: '🕵️', label: 'Auditor' },
 ];
 
 export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUpdated }) {
@@ -140,7 +150,7 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
           await supabase.auth.updateUser({ data: { name: trimmed } });
         }
       } catch {}
-      setNameMessage('Profile name updated successfully.');
+      setNameMessage('Display name updated successfully.');
       if (onProfileUpdated) {
         onProfileUpdated({ name: trimmed, avatar });
       }
@@ -151,34 +161,29 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
     }
   };
 
-  const handleChangePassword = async (e) => {
+  const handleUpdatePassword = async (e) => {
     e.preventDefault();
-    setPassBusy(true);
     setPassError('');
     setPassMessage('');
 
     if (newPassword.length < 6) {
       setPassError('Password must be at least 6 characters.');
-      setPassBusy(false);
       return;
     }
     if (newPassword !== confirmPassword) {
       setPassError('Passwords do not match.');
-      setPassBusy(false);
       return;
     }
 
+    setPassBusy(true);
     try {
-      if (!supabase?.auth?.updateUser) {
-        throw new Error('Authentication service not connected.');
-      }
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-      setPassMessage('Password changed successfully!');
+      setPassMessage('Password updated successfully.');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err) {
-      setPassError(err.message || 'Failed to change password.');
+      setPassError(err.message || 'Failed to update password.');
     } finally {
       setPassBusy(false);
     }
@@ -187,61 +192,62 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
   const maskEmail = (emailStr) => {
     if (!emailStr) return '';
     const parts = emailStr.split('@');
-    if (parts.length < 2) return emailStr;
+    if (parts.length !== 2) return emailStr;
     const namePart = parts[0];
-    const masked = namePart.length > 2 
-      ? namePart.slice(0, 2) + '••••' + namePart.slice(-1)
-      : namePart + '••••';
-    return `${masked}@${parts[1]}`;
+    const visible = namePart.length > 3 ? namePart.slice(0, 3) : namePart.slice(0, 1);
+    return `${visible}•••@${parts[1]}`;
   };
 
   return (
-    <div className="profile-modal-backdrop" onClick={onClose}>
-      <div 
-        className="profile-modal-dialog" 
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="profile-modal-title"
-      >
+    <div className="profile-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="profile-modal-container" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="profile-modal-header">
-          <div className="profile-modal-title-wrap">
-            <span className="profile-modal-badge">DOSSIER</span>
-            <h2 id="profile-modal-title" className="profile-modal-title">Account & Profile Settings</h2>
+          <div className="profile-modal-title">
+            <IconUser size={18} style={{ color: 'var(--brand-primary)' }} />
+            <span>Account &amp; Workspace Settings</span>
           </div>
-          <button 
-            type="button" 
-            className="profile-modal-close" 
-            onClick={onClose} 
-            title="Close (Esc)"
+          <button
+            type="button"
+            className="profile-modal-close"
+            onClick={onClose}
+            aria-label="Close dialog"
           >
-            ✕
+            <IconX size={16} />
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="profile-modal-tabs">
+        <div className="profile-tabs-nav" role="tablist">
           <button
             type="button"
-            className={`profile-tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
+            className={`profile-tab-btn ${activeTab === 'profile' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('profile')}
           >
-            👤 Profile & Avatar
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <IconUser size={14} />
+              <span>Profile &amp; Avatar</span>
+            </span>
           </button>
           <button
             type="button"
-            className={`profile-tab-btn ${activeTab === 'appearance' ? 'active' : ''}`}
+            className={`profile-tab-btn ${activeTab === 'appearance' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('appearance')}
           >
-            🌓 Appearance
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              {isDark ? <IconMoon size={14} /> : <IconSun size={14} />}
+              <span>Appearance</span>
+            </span>
           </button>
           <button
             type="button"
-            className={`profile-tab-btn ${activeTab === 'security' ? 'active' : ''}`}
+            className={`profile-tab-btn ${activeTab === 'security' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('security')}
           >
-            🔒 Security
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <IconShield size={14} />
+              <span>Security</span>
+            </span>
           </button>
         </div>
 
@@ -251,20 +257,19 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
           {activeTab === 'profile' && (
             <div className="profile-tab-content">
               {/* Avatar Showcase */}
-              <div className="avatar-showcase-card">
-                <div className="avatar-preview-container">
+              <div className="avatar-showcase-card" style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '20px' }}>
+                <div className="avatar-preview-container" style={{ width: '64px', height: '64px', borderRadius: '50%', overflow: 'hidden', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-default)', display: 'grid', placeItems: 'center' }}>
                   {avatar?.startsWith('data:image') || avatar?.startsWith('http') ? (
-                    <img src={avatar} alt="Profile" className="avatar-preview-img" />
+                    <img src={avatar} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : avatar ? (
-                    <div className="avatar-preview-preset">{avatar}</div>
+                    <div style={{ fontSize: '30px', lineHeight: 1 }}>{avatar}</div>
                   ) : (
-                    <div className="avatar-preview-initial">{initial}</div>
+                    <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-secondary)' }}>{initial}</div>
                   )}
-                  <span className="avatar-ring-label">CURRENT AVATAR</span>
                 </div>
 
-                <div className="avatar-actions-wrap">
-                  <div className="avatar-upload-row">
+                <div className="avatar-actions-wrap" style={{ flex: 1 }}>
+                  <div className="avatar-upload-row" style={{ display: 'flex', gap: '8px' }}>
                     <input 
                       type="file" 
                       ref={fileInputRef} 
@@ -274,15 +279,17 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
                     />
                     <button 
                       type="button" 
-                      className="button button-primary avatar-upload-btn"
+                      className="button button-primary"
+                      style={{ fontSize: '12px', padding: '6px 12px' }}
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      📷 Upload Photo
+                      Upload Photo
                     </button>
                     {avatar && (
                       <button 
                         type="button" 
                         className="button button-quiet"
+                        style={{ fontSize: '12px', padding: '6px 12px' }}
                         onClick={() => saveAvatar('')}
                         title="Revert to initial letter"
                       >
@@ -290,26 +297,29 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
                       </button>
                     )}
                   </div>
-                  <small className="field-hint">Upload JPEG/PNG/SVG. Automatically cropped square.</small>
+                  <small style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                    Upload an image or choose a professional persona below.
+                  </small>
                 </div>
               </div>
 
-              {/* Preset Avatars Selection */}
-              <div className="profile-section-block">
-                <div className="section-label">OR CHOOSE A NEO-BRUTALIST ICON</div>
-                <div className="preset-avatar-grid">
+              {/* Preset Personas */}
+              <div className="profile-section-block" style={{ marginBottom: '20px' }}>
+                <div className="section-label">AVATAR PERSONA</div>
+                <div className="avatar-presets-grid">
                   {PRESET_AVATARS.map((p) => {
                     const isSelected = avatar === p.icon;
                     return (
                       <button
                         key={p.id}
                         type="button"
-                        className={`preset-avatar-chip ${isSelected ? 'selected' : ''}`}
+                        className={`avatar-preset-item ${isSelected ? 'is-selected' : ''}`}
                         onClick={() => saveAvatar(p.icon)}
                         title={p.label}
+                        aria-label={p.label}
                       >
-                        <span className="preset-icon">{p.icon}</span>
-                        <span className="preset-name">{p.label}</span>
+                        <span className="avatar-preset-symbol">{p.icon}</span>
+                        <span className="avatar-preset-title">{p.label}</span>
                       </button>
                     );
                   })}
@@ -322,54 +332,48 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
                 {nameError && <p className="form-error" role="alert">{nameError}</p>}
                 {nameMessage && <p className="form-success" role="status">{nameMessage}</p>}
                 
-                <div className="form-field-group">
-                  <label htmlFor="profile-name-input">Display Name</label>
-                  <div className="input-action">
-                    <input 
-                      id="profile-name-input"
-                      type="text" 
-                      value={name} 
-                      onChange={(e) => setName(e.target.value)} 
-                      placeholder="e.g. Prathvik Mehra"
-                      maxLength={120}
-                    />
-                    <button 
-                      type="submit" 
-                      className="button button-primary"
-                      disabled={savingName}
-                    >
-                      {savingName ? 'Saving…' : 'Save Name'}
-                    </button>
-                  </div>
+                <div style={{ display: 'flex', gap: '8px', margin: '8px 0 16px' }}>
+                  <input 
+                    id="profile-name-input"
+                    type="text" 
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)} 
+                    placeholder="Your name"
+                    maxLength={120}
+                    style={{ flex: 1 }}
+                  />
+                  <button 
+                    type="submit" 
+                    className="button button-primary"
+                    disabled={savingName}
+                  >
+                    {savingName ? 'Saving…' : 'Save'}
+                  </button>
                 </div>
 
-                <div className="account-meta-card">
-                  <div className="meta-row">
-                    <span className="meta-label">Account Email</span>
-                    <div className="meta-value-wrap">
-                      <span className="meta-value">
+                <div className="account-meta-card" style={{ background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Account Email</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
                         {showEmail ? userEmail : maskEmail(userEmail)}
                       </span>
                       <button 
                         type="button" 
                         className="link-button" 
-                        style={{ fontSize: '12px', padding: '2px 6px' }}
+                        style={{ fontSize: '11px' }}
                         onClick={() => setShowEmail(!showEmail)}
                       >
                         {showEmail ? 'Hide' : 'Reveal'}
                       </button>
-                      <span className="verified-pill">✓ Verified</span>
+                      <span className="verified-pill">Verified</span>
                     </div>
                   </div>
-                  <div className="meta-row">
-                    <span className="meta-label">Membership Tier</span>
-                    <span className={`plan-badge ${userProfile?.plan === 'pro' ? 'is-pro' : 'is-free'}`}>
-                      {userProfile?.plan === 'pro' ? '★ PRO MEMBER' : 'FREE TIER (5 TOPICS)'}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Tier</span>
+                    <span className="plan-badge">
+                      {userProfile?.plan === 'pro' ? 'PRO MEMBER' : 'FREE TIER (5 MONITORS)'}
                     </span>
-                  </div>
-                  <div className="meta-row">
-                    <span className="meta-label">Active Topics Tracked</span>
-                    <span className="meta-value">{userProfile?.topicCount ?? '—'} topics</span>
                   </div>
                 </div>
               </form>
@@ -379,153 +383,121 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
           {/* TAB 2: APPEARANCE & THEME TOGGLE */}
           {activeTab === 'appearance' && (
             <div className="profile-tab-content">
-              <div className="theme-toggle-header">
-                <div>
-                  <div className="section-label">THEME PALETTE</div>
-                  <h3 style={{ margin: '4px 0 8px', fontSize: '18px', fontWeight: 800 }}>
-                    Interface Color Mode
-                  </h3>
-                  <p style={{ margin: 0, fontSize: '13px', color: 'var(--muted)' }}>
-                    Switch between Notice Me's signature Sunlit Gazette aesthetic and the Midnight Radar high-contrast dark theme.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className={`theme-switch-btn ${isDark ? 'is-dark' : 'is-light'}`}
-                  onClick={toggleTheme}
-                  title="Toggle Light / Dark mode"
-                >
-                  <span className="theme-switch-slider">
-                    {isDark ? '🌙' : '☀️'}
-                  </span>
-                  <span className="theme-switch-text">
-                    {isDark ? 'DARK ACTIVE' : 'LIGHT ACTIVE'}
-                  </span>
-                </button>
+              <div className="theme-toggle-header" style={{ marginBottom: '16px' }}>
+                <div className="section-label">THEME SELECTION</div>
+                <h3 style={{ margin: '4px 0 6px', fontSize: '16px', fontWeight: 700 }}>
+                  Interface Mode
+                </h3>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  Choose between the high-contrast light terminal and precision midnight dark palette.
+                </p>
               </div>
 
-              {/* Interactive Visual Theme Cards */}
-              <div className="theme-card-grid">
+              {/* Visual Theme Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 {/* Light Theme Card */}
                 <div 
-                  className={`theme-selection-card light-preview ${!isDark ? 'active-theme' : ''}`}
+                  className={`search-topic-card ${!isDark ? 'is-active-theme' : ''}`}
                   onClick={() => setTheme('light')}
+                  style={{
+                    border: !isDark ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
+                    background: 'var(--bg-surface)',
+                    padding: '14px',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer',
+                  }}
                 >
-                  <div className="theme-card-topbar">
-                    <span className="theme-card-title">☀️ Sunlit Gazette</span>
-                    {!isDark && <span className="theme-active-tag">CURRENT</span>}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <IconSun size={14} />
+                      <span>Light Theme</span>
+                    </span>
+                    {!isDark && <IconCheck size={14} style={{ color: 'var(--brand-primary)' }} />}
                   </div>
-                  <p className="theme-card-desc">
-                    Classic brutalist newspaper styling on cream canvas with tactile ink-black borders and vibrant accents.
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                    Clean off-white canvas with dark slate linework and balanced contrast.
                   </p>
-                  <div className="theme-swatch-row">
-                    <div className="theme-swatch" style={{ background: '#FFFDF5', border: '1.5px solid #000' }} title="Canvas #FFFDF5" />
-                    <div className="theme-swatch" style={{ background: '#000000' }} title="Ink #000000" />
-                    <div className="theme-swatch" style={{ background: '#FFE600', border: '1.5px solid #000' }} title="Highlight #FFE600" />
-                    <div className="theme-swatch" style={{ background: '#A3E635', border: '1.5px solid #000' }} title="Lime #A3E635" />
-                    <div className="theme-swatch" style={{ background: '#38BDF8', border: '1.5px solid #000' }} title="Cyan #38BDF8" />
-                  </div>
                 </div>
 
                 {/* Dark Theme Card */}
                 <div 
-                  className={`theme-selection-card dark-preview ${isDark ? 'active-theme' : ''}`}
+                  className={`search-topic-card ${isDark ? 'is-active-theme' : ''}`}
                   onClick={() => setTheme('dark')}
+                  style={{
+                    border: isDark ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
+                    background: 'var(--bg-surface-elevated)',
+                    padding: '14px',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer',
+                  }}
                 >
-                  <div className="theme-card-topbar">
-                    <span className="theme-card-title">🌙 Midnight Radar</span>
-                    {isDark && <span className="theme-active-tag">CURRENT</span>}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <IconMoon size={14} />
+                      <span>Dark Theme</span>
+                    </span>
+                    {isDark && <IconCheck size={14} style={{ color: 'var(--brand-primary)' }} />}
                   </div>
-                  <p className="theme-card-desc">
-                    Deep obsidian background with crisp white linework and neon beacon indicators for late-night intelligence monitoring.
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                    Deep obsidian background with slate linework for focused monitoring.
                   </p>
-                  <div className="theme-swatch-row">
-                    <div className="theme-swatch" style={{ background: '#0F1115', border: '1.5px solid #fff' }} title="Obsidian #0F1115" />
-                    <div className="theme-swatch" style={{ background: '#F8FAFC', border: '1.5px solid #fff' }} title="Linework #F8FAFC" />
-                    <div className="theme-swatch" style={{ background: '#FFE600', border: '1.5px solid #fff' }} title="Highlight #FFE600" />
-                    <div className="theme-swatch" style={{ background: '#A3E635', border: '1.5px solid #fff' }} title="Lime #A3E635" />
-                    <div className="theme-swatch" style={{ background: '#38BDF8', border: '1.5px solid #fff' }} title="Cyan #38BDF8" />
-                  </div>
                 </div>
-              </div>
-
-              <div className="theme-callout-note">
-                <span className="callout-icon">💡</span>
-                <span>Theme preference is saved locally and applies across all browser tabs automatically.</span>
               </div>
             </div>
           )}
 
-          {/* TAB 3: SECURITY & PASSWORD */}
+          {/* TAB 3: SECURITY */}
           {activeTab === 'security' && (
             <div className="profile-tab-content">
-              <div className="section-label">ACCESS & CREDENTIALS</div>
-              <h3 style={{ margin: '4px 0 8px', fontSize: '18px', fontWeight: 800 }}>
-                Security & Authentication
-              </h3>
-              <p style={{ margin: '0 0 18px', fontSize: '13px', color: 'var(--muted)' }}>
-                Keep your account protected. Enter a secure new password below to update your login credentials.
-              </p>
+              <form onSubmit={handleUpdatePassword} className="profile-form-block">
+                <div className="section-label">ACCOUNT SECURITY</div>
+                <h3 style={{ margin: '4px 0 6px', fontSize: '16px', fontWeight: 700 }}>
+                  Update Password
+                </h3>
+                <p style={{ margin: '0 0 16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  Set a new password for your verified email address. Minimum 6 characters.
+                </p>
 
-              {passError && <p className="form-error" role="alert">{passError}</p>}
-              {passMessage && <p className="form-success" role="status">{passMessage}</p>}
+                {passError && <p className="form-error" role="alert">{passError}</p>}
+                {passMessage && <p className="form-success" role="status">{passMessage}</p>}
 
-              <form onSubmit={handleChangePassword} className="security-form-card">
-                <div className="form-field-group">
-                  <label htmlFor="new-password">New Password</label>
-                  <input
-                    id="new-password"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="••••••••"
-                    minLength={6}
-                    required
-                  />
-                  <small className="field-hint">Must be at least 6 characters.</small>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <label htmlFor="new-pass" style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>New Password</label>
+                    <input
+                      id="new-pass"
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="••••••••"
+                      style={{ width: '100%' }}
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="confirm-pass" style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Confirm Password</label>
+                    <input
+                      id="confirm-pass"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      style={{ width: '100%' }}
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="button button-primary"
+                    disabled={passBusy || !newPassword}
+                    style={{ alignSelf: 'flex-start', marginTop: '4px' }}
+                  >
+                    {passBusy ? 'Updating…' : 'Update Password'}
+                  </button>
                 </div>
-
-                <div className="form-field-group">
-                  <label htmlFor="confirm-password">Confirm New Password</label>
-                  <input
-                    id="confirm-password"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    minLength={6}
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="button button-primary"
-                  style={{ width: '100%', marginTop: '8px' }}
-                  disabled={passBusy}
-                >
-                  {passBusy ? 'Updating Password…' : '🔒 Update Password'}
-                </button>
               </form>
-
-              <div className="session-logout-block">
-                <div>
-                  <strong>Session Management</strong>
-                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--muted)' }}>
-                    End your active session on this device.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="button button-danger"
-                  onClick={() => {
-                    onClose();
-                    signOut();
-                  }}
-                >
-                  Sign Out of Account
-                </button>
-              </div>
             </div>
           )}
         </div>

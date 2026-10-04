@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import DiffCard from './DiffCard.jsx';
+import { IconCheck, IconChevronDown } from './Icons.jsx';
 
 function getChangeImpact(change) {
   if (change?.structured?.impact) return change.structured.impact;
@@ -34,8 +35,10 @@ export default function TimelineView({ diffs = [], loading }) {
     <section aria-labelledby="timeline-heading" className="timeline-section">
       <div className="section-heading">
         <div>
-          <div className="section-label">CHRONOLOGICAL AUDIT TRAIL</div>
-          <h2 id="timeline-heading" style={{ margin: '4px 0 0' }}>Verified Change Timeline</h2>
+          <div className="section-label">AUDIT TRAIL</div>
+          <h2 id="timeline-heading" style={{ margin: '4px 0 0', fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
+            Verified Change Timeline
+          </h2>
         </div>
         <div className="timeline-filter-pills">
           <button
@@ -50,14 +53,14 @@ export default function TimelineView({ diffs = [], loading }) {
             className={`filter-pill is-high ${filter === 'HIGH' ? 'is-active' : ''}`}
             onClick={() => setFilter('HIGH')}
           >
-            🔴 High Impact ({diffs.filter((d) => getChangeImpact(d) === 'HIGH').length})
+            High Impact ({diffs.filter((d) => getChangeImpact(d) === 'HIGH').length})
           </button>
           <button
             type="button"
             className={`filter-pill is-medium ${filter === 'MEDIUM' ? 'is-active' : ''}`}
             onClick={() => setFilter('MEDIUM')}
           >
-            🟠 Medium ({diffs.filter((d) => getChangeImpact(d) === 'MEDIUM').length})
+            Moderate ({diffs.filter((d) => getChangeImpact(d) === 'MEDIUM').length})
           </button>
         </div>
       </div>
@@ -66,7 +69,19 @@ export default function TimelineView({ diffs = [], loading }) {
         <div className="empty-state">Loading timeline…</div>
       ) : diffs.length === 0 ? (
         <div className="empty-state">
-          <span aria-hidden="true" style={{ fontSize: '32px' }}>✓</span>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            background: 'var(--status-verified-bg)',
+            color: 'var(--status-verified-dot)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '10px'
+          }}>
+            <IconCheck size={20} />
+          </div>
           <h3>Baseline recorded — no changes detected yet</h3>
           <p>
             Notice Me continuously monitors Search and News for official revisions. Any material date shifts, vacancy revisions, or eligibility notices will be redlined here.
@@ -127,8 +142,9 @@ export default function TimelineView({ diffs = [], loading }) {
                         <span className="headline-text">{headline}</span>
                       </div>
                     </div>
-                    <div className="timeline-bar-action">
-                      <span>{isExpanded ? 'Hide details ▴' : 'View AI breakdown ▾'}</span>
+                    <div className="timeline-bar-action" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span>{isExpanded ? 'Hide breakdown' : 'Inspect change'}</span>
+                      <IconChevronDown size={13} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
                     </div>
                   </div>
 

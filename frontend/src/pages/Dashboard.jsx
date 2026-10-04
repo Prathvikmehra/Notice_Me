@@ -12,6 +12,18 @@ import RecentChangesFeed from '../components/RecentChangesFeed.jsx';
 import AIChatModal from '../components/AIChatModal.jsx';
 import ProModal from '../components/ProModal.jsx';
 import ProfileModal from '../components/ProfileModal.jsx';
+import {
+  IconZap,
+  IconFileText,
+  IconRadio,
+  IconSearch,
+  IconX,
+  IconMenu,
+  IconSparkles,
+  IconRefresh,
+  IconLogOut,
+  IconUser,
+} from '../components/Icons.jsx';
 
 export default function Dashboard() {
   const { signOut, user } = useAuth();
@@ -206,7 +218,7 @@ export default function Dashboard() {
             onClick={() => setSidebarOpen(false)}
             aria-label="Close navigation"
           >
-            ✕
+            <IconX size={16} />
           </button>
         </div>
         <div className="sidebar-intro"><span className="live-dot" /> Live SerpApi monitoring</div>
@@ -220,10 +232,10 @@ export default function Dashboard() {
             }}
           >
             <div className="sidebar-nav-label">
-              <span className="sidebar-nav-icon">⚡</span>
+              <span className="sidebar-nav-icon"><IconZap size={14} /></span>
               <span>What Changed</span>
             </div>
-            <span className="sidebar-nav-badge" style={{ background: '#FEE2E2', color: '#991B1B' }}>DIGEST</span>
+            <span className="sidebar-nav-badge">DIGEST</span>
           </button>
           <button
             type="button"
@@ -235,7 +247,7 @@ export default function Dashboard() {
             }}
           >
             <div className="sidebar-nav-label">
-              <span className="sidebar-nav-icon">📑</span>
+              <span className="sidebar-nav-icon"><IconFileText size={14} /></span>
               <span>My Watchlist</span>
             </div>
             <span className="sidebar-nav-count">{topics.length}</span>
@@ -250,10 +262,10 @@ export default function Dashboard() {
             }}
           >
             <div className="sidebar-nav-label">
-              <span className="sidebar-nav-icon">🔥</span>
+              <span className="sidebar-nav-icon"><IconRadio size={14} /></span>
               <span>Trending Radar</span>
             </div>
-            <span className="sidebar-nav-badge">HOT</span>
+            <span className="sidebar-nav-badge">RADAR</span>
           </button>
         </div>
         <TopicList
@@ -283,20 +295,22 @@ export default function Dashboard() {
               aria-label="Toggle navigation drawer"
               title="Toggle navigation"
             >
-              ☰
+              <IconMenu size={18} />
             </button>
             <span className="topbar-badge">NOTICE BOARD</span>
             <span className="topbar-divider">/</span>
             <span className="topbar-active-view">
               {viewMode === 'trending'
-                ? '🔥 Trending Radar'
+                ? 'Trending Radar'
                 : viewMode === 'activity'
-                ? '⚡ Intelligence Digest (What Changed)'
+                ? 'Intelligence Digest'
                 : (selected ? selected.name : 'Watchlist Overview')}
             </span>
           </div>
           <div className="topbar-search">
-            <span className="topbar-search-icon" aria-hidden="true">🔍</span>
+            <span className="topbar-search-icon" aria-hidden="true">
+              <IconSearch size={14} />
+            </span>
             <input
               type="text"
               placeholder="Search topics, circulars, diffs..."
@@ -313,7 +327,7 @@ export default function Dashboard() {
                 title="Clear search"
                 aria-label="Clear search"
               >
-                ✕
+                <IconX size={13} />
               </button>
             ) : (
               <span className="search-kbd-hint">ESC</span>
@@ -326,7 +340,8 @@ export default function Dashboard() {
               onClick={() => setShowChat(true)}
               title="Ask AI Analyst"
             >
-              🤖 Ask AI
+              <IconSparkles size={14} />
+              <span>Ask AI</span>
             </button>
             <button
               type="button"
@@ -334,7 +349,7 @@ export default function Dashboard() {
               onClick={() => setShowProModal(true)}
               title="Pro features coming soon"
             >
-              {userPlan === 'pro' ? '★ PRO' : '⚡ UPGRADE'}
+              {userPlan === 'pro' ? 'PRO TIER' : 'FREE TIER'}
             </button>
             <button
               type="button"
@@ -353,8 +368,14 @@ export default function Dashboard() {
                 </span>
               )}
             </button>
-            <button type="button" className="button button-quiet topbar-btn" onClick={() => setRevision((value) => value + 1)} title="Refresh data">↻ Refresh</button>
-            <button type="button" className="button button-quiet topbar-btn" onClick={signOut} title="Sign out">Sign out</button>
+            <button type="button" className="button button-quiet topbar-btn" onClick={() => setRevision((value) => value + 1)} title="Refresh data">
+              <IconRefresh size={13} />
+              <span>Refresh</span>
+            </button>
+            <button type="button" className="button button-quiet topbar-btn" onClick={signOut} title="Sign out">
+              <IconLogOut size={13} />
+              <span>Sign out</span>
+            </button>
           </div>
         </header>
         {error && <p className="form-error page-error" role="alert">{error}</p>}
@@ -363,17 +384,30 @@ export default function Dashboard() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div>
                 <div className="section-label">SEARCH RESULTS</div>
-                <h2 style={{ margin: '4px 0 0' }}>Results for “{query.trim()}”</h2>
+                <h2 style={{ margin: '4px 0 0', fontSize: '18px', fontWeight: 700 }}>Results for “{query.trim()}”</h2>
               </div>
               <button type="button" className="button button-quiet" onClick={() => setQuery('')}>
-                ✕ Close Search
+                <IconX size={14} />
+                <span>Close Search</span>
               </button>
             </div>
             {searching ? (
               <div className="empty-state" style={{ marginTop: '20px' }}>Searching topics & update history…</div>
             ) : (!searchResults?.topics?.length && !searchResults?.diffs?.length) ? (
               <div className="empty-state" style={{ marginTop: '20px' }}>
-                <span aria-hidden="true">🔍</span>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'var(--bg-surface-elevated)',
+                  color: 'var(--text-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '10px'
+                }}>
+                  <IconSearch size={20} />
+                </div>
                 <h3>No matches found</h3>
                 <p>No topics or update summaries matched your query.</p>
               </div>
@@ -451,7 +485,9 @@ export default function Dashboard() {
         onClick={() => setShowChat(true)}
         title="Ask AI Intelligence Analyst"
       >
-        <span className="floating-bot-icon">🤖</span>
+        <span className="floating-bot-icon">
+          <IconSparkles size={16} />
+        </span>
         <span className="floating-btn-label">Ask AI Analyst</span>
         <span className="floating-hot-dot" />
       </button>

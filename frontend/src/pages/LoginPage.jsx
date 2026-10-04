@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import Logo from '../components/Logo.jsx';
+import { IconShield, IconArrowRight } from '../components/Icons.jsx';
 
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -42,28 +43,54 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '26px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
           <Logo size="large" />
         </div>
         <h2 className="login-heading">{isSignUp ? 'Create your account' : 'Welcome back'}</h2>
         <p className="login-sub">
           {isSignUp
-            ? 'Track public notices and receive verified change alerts.'
-            : 'Sign in to view your tracked public notices and diff history.'}
+            ? 'Track critical public notices and receive verified change alerts.'
+            : 'Sign in to access your monitored circulars and verified change history.'}
         </p>
+
         {error && <p className="form-error" role="alert">{error}</p>}
         {message && <p className="form-success" role="status">{message}</p>}
+
         <form onSubmit={submit} className="login-form">
           {isSignUp && (
             <>
-              <label htmlFor="auth-name">Name</label>
-              <input id="auth-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name (optional)" />
+              <label htmlFor="auth-name">Full name</label>
+              <input
+                id="auth-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name (optional)"
+              />
             </>
           )}
-          <label htmlFor="auth-email">Email</label>
-          <input id="auth-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
+
+          <label htmlFor="auth-email">Account email</label>
+          <input
+            id="auth-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            required
+          />
+
           <label htmlFor="auth-password">Password</label>
-          <input id="auth-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" minLength={6} required />
+          <input
+            id="auth-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            minLength={6}
+            required
+          />
+
           {isSignUp && (
             <>
               <label htmlFor="auth-confirm-password">Confirm password</label>
@@ -78,14 +105,32 @@ export default function LoginPage() {
               />
             </>
           )}
-          <button className="button button-primary login-button" disabled={busy} type="submit">{busy ? 'Please wait…' : isSignUp ? 'Sign up' : 'Sign in'}</button>
+
+          <button
+            className="button button-primary login-button"
+            disabled={busy}
+            type="submit"
+          >
+            <span>{busy ? 'Please wait…' : isSignUp ? 'Create Account' : 'Sign In'}</span>
+            <IconArrowRight size={14} />
+          </button>
         </form>
+
         <p className="login-toggle">
-          {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-          <button type="button" className="link-button" onClick={() => { setIsSignUp(!isSignUp); setConfirmPassword(''); setError(''); setMessage(''); }}>
-            {isSignUp ? 'Sign in' : 'Sign up'}
+          {isSignUp ? 'Already registered?' : "Don't have an account?"}{' '}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => { setIsSignUp(!isSignUp); setConfirmPassword(''); setError(''); setMessage(''); }}
+          >
+            {isSignUp ? 'Sign in' : 'Create account'}
           </button>
         </p>
+
+        <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
+          <IconShield size={13} style={{ color: 'var(--status-verified-dot)' }} />
+          <span>Verified Government &amp; Public Notice Surveillance</span>
+        </div>
       </div>
     </div>
   );

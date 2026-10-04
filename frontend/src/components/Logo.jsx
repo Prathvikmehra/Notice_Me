@@ -1,7 +1,7 @@
 import React from 'react';
 import logoImg from '../assets/logo.png';
 
-export function LogoIcon({ size = 42, className = '' }) {
+export function LogoIcon({ size = 36, className = '' }) {
   return (
     <div
       className={`logo-icon-box ${className}`}
@@ -14,6 +14,8 @@ export function LogoIcon({ size = 42, className = '' }) {
         position: 'relative',
         userSelect: 'none',
         flexShrink: 0,
+        borderRadius: '8px',
+        overflow: 'hidden',
       }}
     >
       <img
@@ -23,8 +25,8 @@ export function LogoIcon({ size = 42, className = '' }) {
         height={size}
         className="brand-logo-img"
         style={{
-          width: `${size}px`,
-          height: `${size}px`,
+          width: '100%',
+          height: '100%',
           objectFit: 'contain',
           display: 'block',
         }}
@@ -35,25 +37,27 @@ export function LogoIcon({ size = 42, className = '' }) {
 
 export default function Logo({
   size = 'medium',
-  subtitle = 'PUBLIC NOTICE RADAR',
+  subtitle = 'STATEFUL CHANGE RADAR',
   showSubtitle = true,
   onClick,
 }) {
   const isLarge = size === 'large';
   const isSmall = size === 'small';
 
-  const iconSize = isLarge ? 58 : isSmall ? 34 : 46;
-  const fontSize = isLarge ? '34px' : isSmall ? '20px' : '26px';
-  const subFontSize = isLarge ? '11px' : isSmall ? '8px' : '9.5px';
+  const iconSize = isLarge ? 44 : isSmall ? 28 : 34;
+  const fontSize = isLarge ? '26px' : isSmall ? '17px' : '20px';
+  const subFontSize = isLarge ? '10px' : isSmall ? '8px' : '9px';
 
   return (
     <div
       className="brand-logo-container"
       onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: isLarge ? '14px' : '11px',
+        gap: isLarge ? '12px' : isSmall ? '8px' : '10px',
         textDecoration: 'none',
         cursor: onClick ? 'pointer' : 'default',
         userSelect: 'none',
@@ -65,63 +69,37 @@ export default function Logo({
         <div
           className="brand-title-row"
           style={{
-            fontFamily: "var(--font-brand, 'Outfit'), 'Plus Jakarta Sans', sans-serif",
+            fontFamily: "var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif)",
             fontSize,
-            fontWeight: 800,
-            letterSpacing: '-0.035em',
-            lineHeight: 1,
+            fontWeight: 700,
+            letterSpacing: '-0.025em',
+            lineHeight: 1.1,
             display: 'flex',
             alignItems: 'center',
+            color: 'var(--text-primary)',
           }}
         >
-          <span className="brand-title-notice">notice</span>
-          <span
-            className="brand-badge-me"
-            style={{
-              background: 'var(--yellow, #FFE600)',
-              color: '#000000',
-              border: '2.5px solid #000000',
-              boxShadow: isLarge ? '3px 3px 0px #000000' : '2.2px 2.2px 0px #000000',
-              borderRadius: isLarge ? '7px' : '5px',
-              padding: isLarge ? '2px 9px' : '1px 7px',
-              marginLeft: '6px',
-              transform: 'rotate(3.5deg)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: isLarge ? '6px' : '4px',
-              fontSize: '0.88em',
-              fontWeight: 900,
-              lineHeight: 1.1,
-              transition: 'transform 0.18s ease, box-shadow 0.18s ease',
-            }}
-          >
-            <span>me</span>
-            <span
-              className="brand-beacon-dot"
-              style={{
-                width: isLarge ? '8px' : '6px',
-                height: isLarge ? '8px' : '6px',
-                borderRadius: '50%',
-                background: '#FF3B30',
-                border: '1.2px solid #000000',
-                display: 'inline-block',
-                flexShrink: 0,
-              }}
-            />
+          <span className="brand-title-notice">Notice</span>
+          <span className="brand-badge-me">
+            <span>Me</span>
+            <span className="brand-beacon-dot" aria-hidden="true" />
           </span>
         </div>
 
         {showSubtitle && subtitle && (
-          <div style={{ marginTop: isLarge ? '6px' : '4px' }}>
+          <div style={{ marginTop: '2px' }}>
             <span
               className="brand-subtitle-badge"
               style={{
                 fontSize: subFontSize,
-                padding: isLarge ? '2px 8px' : '1px 6px',
+                letterSpacing: '0.06em',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                color: 'var(--text-muted)',
+                fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
               }}
             >
-              <span style={{ color: 'var(--lime, #A3E635)', fontSize: '11px', lineHeight: 1 }}>✦</span>
-              <span>{subtitle}</span>
+              {subtitle}
             </span>
           </div>
         )}

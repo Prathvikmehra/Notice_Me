@@ -3,6 +3,16 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { getLatestSnapshot, getTimeline, updateAlertSettings, syncTopic } from '../api/client.js';
 import TimelineView from '../components/TimelineView.jsx';
 import DossierModal from '../components/DossierModal.jsx';
+import {
+  IconFileText,
+  IconRefresh,
+  IconTrash,
+  IconExternalLink,
+  IconClock,
+  IconAlertTriangle,
+  IconShield,
+  IconBell,
+} from '../components/Icons.jsx';
 
 const STANDARD_FREQS = ['1d', '2d', '3d', '5d', '7d', '14d', '30d'];
 
@@ -205,7 +215,8 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
             disabled={!briefing || syncing}
             title="Export full executive intelligence dossier as PDF, Markdown, or share link"
           >
-            📄 Export Dossier
+            <IconFileText size={15} />
+            <span>Export Dossier</span>
           </button>
           <button
             type="button"
@@ -214,10 +225,12 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
             disabled={syncing || busy}
             title="Fetch latest Google Search & News results now"
           >
-            {syncing ? '⚡ Syncing…' : '⚡ Sync Live Data'}
+            <IconRefresh size={15} className={syncing ? 'spin-icon' : ''} />
+            <span>{syncing ? 'Syncing…' : 'Sync Live Data'}</span>
           </button>
           <button type="button" className="button button-danger delete-button" onClick={() => onDelete(topic)}>
-            Remove notice
+            <IconTrash size={15} />
+            <span>Remove notice</span>
           </button>
         </div>
       </div>
@@ -261,8 +274,8 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
           <div className="briefing-radar-strip">
             <div className="radar-strip-left">
               <span className={`radar-urgency-badge urgency-${(briefing.urgency || 'routine').toLowerCase()}`}>
-                <span className="urgency-beacon" />
-                {briefing.urgency || 'ROUTINE'} ACTION REQUIRED
+                <span className="live-dot" style={{ width: '6px', height: '6px' }} />
+                <span>{briefing.urgency || 'ROUTINE'} ACTION REQUIRED</span>
               </span>
               <span className="radar-strip-meta">
                 Volatility Index: <strong>{briefing.volatilityScore ?? 35}</strong>/100
@@ -278,7 +291,7 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
 
           <div className="briefing-summary-box">
             <div className="briefing-box-label">
-              <span className="summary-icon">✦</span>
+              <IconShield size={14} className="summary-icon" />
               <span>VERIFIED STATUS OVERVIEW</span>
             </div>
             <p className="briefing-summary-text">{briefing.coreStatus}</p>
@@ -289,7 +302,8 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
                 rel="noopener noreferrer"
                 className="briefing-source-link"
               >
-                Primary Source: <span>{briefing.primarySource.name}</span> ↗
+                <span>Primary Source: <strong>{briefing.primarySource.name}</strong></span>
+                <IconExternalLink size={13} />
               </a>
             )}
           </div>
@@ -313,8 +327,8 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
           {Array.isArray(briefing.deadlines) && briefing.deadlines.length > 0 && (
             <div className="briefing-deadlines-box">
               <div className="briefing-box-label">
-                <span className="summary-icon">⏰</span>
-                <span>DETECTED DEADLINES & KEY DATES</span>
+                <IconClock size={14} className="summary-icon" />
+                <span>DETECTED DEADLINES &amp; KEY DATES</span>
               </div>
               <div className="deadlines-grid">
                 {briefing.deadlines.map((dl, idx) => (
@@ -333,7 +347,7 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
           {briefing.actionRequired && (
             <div className="briefing-action-box">
               <div className="briefing-box-label">
-                <span className="summary-icon">⚡</span>
+                <IconAlertTriangle size={14} className="summary-icon" />
                 <span>RECOMMENDED ACTION FOR YOU</span>
               </div>
               <p className="briefing-action-text">{briefing.actionRequired}</p>
@@ -343,7 +357,7 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
           {briefing.bulletins.length > 0 && (
             <div className="briefing-bulletins">
               <div className="bulletins-header">
-                <span>ACTIVE MEDIA RADAR & TOP BULLETINS</span>
+                <span>ACTIVE MEDIA RADAR &amp; TOP BULLETINS</span>
               </div>
               <div className="bulletins-grid">
                 {briefing.bulletins.map((b, idx) => (
@@ -364,7 +378,7 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
                     {b.snippet ? <div className="bulletin-snippet">{b.snippet}</div> : null}
                     <div className="bulletin-source">
                       <span>{b.source}</span>
-                      <span className="bulletin-arrow">↗</span>
+                      <IconExternalLink size={12} className="bulletin-arrow" />
                     </div>
                   </a>
                 ))}
@@ -387,7 +401,7 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
             <p className="briefing-summary-text">
               {syncing
                 ? 'Connecting to SerpApi to index Google Search and Google News records for this query…'
-                : 'Initial baseline has not been recorded yet. Click “⚡ Sync Live Data” above to fetch real-time intelligence immediately.'}
+                : 'Initial baseline has not been recorded yet. Click “Sync Live Data” above to fetch real-time intelligence immediately.'}
             </p>
           </div>
         </section>
@@ -451,14 +465,6 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
                     setFrequency(`${days}d`);
                   }}
                   disabled={!enabled}
-                  style={{
-                    border: 'var(--border)',
-                    boxShadow: 'var(--shadow-sm)',
-                    borderRadius: '6px',
-                    padding: '8px 10px',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                  }}
                 />
               </div>
             )}
@@ -529,7 +535,6 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
           <div className="alert-destination-box">
             <span className="destination-label">DELIVER TO ACCOUNT EMAIL</span>
             <div className="destination-badge">
-              <span className="destination-icon">✉</span>
               <span className="destination-email">{user?.email || topic.alertEmail || 'Your account email'}</span>
               <span className="verified-pill">VERIFIED</span>
             </div>
@@ -538,7 +543,7 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
           <button className="button button-primary" disabled={busy} type="submit" style={{ width: '100%', marginTop: '6px' }}>
             {busy ? 'Saving schedule…' : 'Save notification preferences'}
           </button>
-          <small>
+          <small style={{ display: 'block', marginTop: '8px', color: 'var(--text-muted)' }}>
             {enabled
               ? `Scheduled updates delivered ${
                   isMonthlyCadence(frequency, isCustomFreq)
@@ -825,6 +830,14 @@ function SourceLink({ item }) {
   try {
     const url = new URL(item.link);
     if (!['http:', 'https:'].includes(url.protocol)) return null;
-    return <a className="source-item" href={item.link} target="_blank" rel="noopener noreferrer"><strong>{item.title}</strong><span>{url.hostname.replace(/^www\./, '')} ↗</span></a>;
+    return (
+      <a className="source-item" href={item.link} target="_blank" rel="noopener noreferrer">
+        <strong>{item.title}</strong>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+          {url.hostname.replace(/^www\./, '')}
+          <IconExternalLink size={12} />
+        </span>
+      </a>
+    );
   } catch { return null; }
 }
