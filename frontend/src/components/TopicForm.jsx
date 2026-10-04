@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
 import { parseMonitorIntent } from '../api/client.js';
+import {
+  IconSparkles,
+  IconSliders,
+  IconCheck,
+  IconPlus,
+} from './Icons.jsx';
 
 const QUICK_PROMPTS = [
   'Monitor GATE 2027. I care about application deadlines, eligibility and exam dates.',
@@ -77,22 +83,28 @@ export default function TopicForm({ onCreate }) {
 
   return (
     <div className="topic-form-container">
-      <div className="section-label">CREATE A MONITOR</div>
+      <div className="section-label">NEW MONITOR</div>
 
-      <div className="form-mode-switch">
+      <div className="form-mode-switch" role="tablist">
         <button
           type="button"
           className={`mode-btn ${mode === 'ai' ? 'is-active' : ''}`}
           onClick={() => { setMode('ai'); setError(''); }}
         >
-          ✨ AI Natural Prompt
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <IconSparkles size={12} />
+            <span>AI Intent</span>
+          </span>
         </button>
         <button
           type="button"
           className={`mode-btn ${mode === 'manual' ? 'is-active' : ''}`}
           onClick={() => { setMode('manual'); setError(''); }}
         >
-          ⚙️ Manual Fields
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <IconSliders size={12} />
+            <span>Manual</span>
+          </span>
         </button>
       </div>
 
@@ -101,7 +113,7 @@ export default function TopicForm({ onCreate }) {
           {!extractedIntent ? (
             <form onSubmit={handleAnalyze}>
               <label htmlFor="nl-prompt" className="form-sublabel">
-                Tell Notice Me what to watch:
+                Describe target update or circular:
               </label>
               <textarea
                 id="nl-prompt"
@@ -114,7 +126,7 @@ export default function TopicForm({ onCreate }) {
               />
 
               <div className="quick-prompt-chips">
-                <span className="chips-label">Try sample:</span>
+                <span className="chips-label">Sample queries:</span>
                 {QUICK_PROMPTS.map((qp, i) => (
                   <button
                     key={i}
@@ -134,17 +146,22 @@ export default function TopicForm({ onCreate }) {
                 disabled={analyzing || !promptText.trim()}
                 type="submit"
               >
-                {analyzing ? 'Analyzing Intent with Gemini…' : 'Extract Monitoring Intent ⚡'}
+                <IconSparkles size={14} />
+                <span>{analyzing ? 'Analyzing Intent…' : 'Extract Intent'}</span>
               </button>
             </form>
           ) : (
             <div className="intent-preview-card">
               <div className="intent-preview-header">
-                <span className="intent-badge">✓ INTENT UNDERSTOOD</span>
+                <span className="intent-badge">
+                  <IconCheck size={12} style={{ marginRight: '3px' }} />
+                  INTENT VERIFIED
+                </span>
                 <button
                   type="button"
                   className="link-button"
                   onClick={() => setExtractedIntent(null)}
+                  style={{ fontSize: '11px' }}
                 >
                   Edit prompt
                 </button>
@@ -162,11 +179,11 @@ export default function TopicForm({ onCreate }) {
 
               {Array.isArray(extractedIntent.watchFocus) && (
                 <div className="intent-field">
-                  <span className="intent-label">I'LL WATCH FOR</span>
+                  <span className="intent-label">MONITORING FOCUS</span>
                   <ul className="intent-checklist">
                     {extractedIntent.watchFocus.map((item, idx) => (
-                      <li key={idx}>
-                        <span className="intent-check">✓</span>
+                      <li key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <IconCheck size={11} style={{ color: 'var(--status-verified-dot)' }} />
                         <span>{item}</span>
                       </li>
                     ))}
@@ -176,11 +193,11 @@ export default function TopicForm({ onCreate }) {
 
               {Array.isArray(extractedIntent.suggestedSources) && (
                 <div className="intent-field">
-                  <span className="intent-label">SOURCES</span>
+                  <span className="intent-label">PORTAL TARGETS</span>
                   <ul className="intent-checklist">
                     {extractedIntent.suggestedSources.map((src, idx) => (
-                      <li key={idx}>
-                        <span className="intent-check">✓</span>
+                      <li key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <IconCheck size={11} style={{ color: 'var(--status-verified-dot)' }} />
                         <span>{src}</span>
                       </li>
                     ))}
@@ -189,7 +206,7 @@ export default function TopicForm({ onCreate }) {
               )}
 
               <div className="intent-field intent-query-preview">
-                <span className="intent-label">SERPAPI TARGET QUERY</span>
+                <span className="intent-label">TARGET QUERY</span>
                 <code>{extractedIntent.query}</code>
               </div>
 
@@ -202,14 +219,16 @@ export default function TopicForm({ onCreate }) {
                   disabled={busy}
                   onClick={handleConfirmCreate}
                 >
-                  {busy ? 'Setting up radar…' : 'Confirm & Start Monitoring 🚀'}
+                  <IconPlus size={14} />
+                  <span>{busy ? 'Setting up…' : 'Start Monitoring'}</span>
                 </button>
                 <button
                   type="button"
                   className="button button-quiet"
                   onClick={() => { setMode('manual'); setExtractedIntent(null); }}
+                  style={{ fontSize: '12px', padding: '6px 10px' }}
                 >
-                  Edit in form
+                  Edit form
                 </button>
               </div>
             </div>
@@ -251,7 +270,8 @@ export default function TopicForm({ onCreate }) {
           </select>
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="button button-primary form-action-btn" disabled={busy} type="submit">
-            {busy ? 'Saving topic…' : 'Track this topic'}
+            <IconPlus size={14} />
+            <span>{busy ? 'Saving topic…' : 'Track this topic'}</span>
           </button>
         </form>
       )}
