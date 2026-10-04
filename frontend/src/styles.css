@@ -2897,8 +2897,70 @@ input:focus, select:focus, textarea:focus {
   flex: 1;
 }
 
-/* Chat Modal Details */
-.chat-messages-container {
+/* Chat Modal Window & Scroll */
+.chat-modal-window {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  width: 100%;
+  max-width: 640px;
+  height: 620px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-header-title h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.chat-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.chat-close-btn {
+  padding: 4px;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-close-btn:hover {
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+}
+
+.chat-grounding-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--status-verified-bg);
+  border-bottom: 1px solid var(--status-verified-border);
+  font-size: 11px;
+  color: var(--status-verified-text);
+  font-family: var(--font-mono);
+}
+
+.chat-messages-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -2906,50 +2968,642 @@ input:focus, select:focus, textarea:focus {
 
 .chat-message-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  gap: 10px;
+  align-items: flex-start;
 }
 
-.chat-message-row.user {
-  align-items: flex-end;
+.chat-message-row.is-user {
+  flex-direction: row-reverse;
 }
 
-.chat-message-bubble {
-  max-width: 85%;
+.chat-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.chat-message-row.is-user .chat-avatar {
+  background: var(--brand-primary);
+  color: #FFFFFF;
+}
+
+.chat-bubble {
+  max-width: 82%;
   padding: 10px 14px;
   border-radius: var(--radius-lg);
   font-size: 13px;
   line-height: 1.5;
-}
-
-.chat-message-row.assistant .chat-message-bubble {
   background: var(--bg-surface-elevated);
   color: var(--text-primary);
-  border-bottom-left-radius: var(--radius-xs);
+  border: 1px solid var(--border-subtle);
 }
 
-.chat-message-row.user .chat-message-bubble {
+.chat-message-row.is-user .chat-bubble {
   background: var(--brand-primary);
   color: #FFFFFF;
-  border-bottom-right-radius: var(--radius-xs);
+  border-color: var(--brand-primary);
 }
 
-.chat-time {
+.chat-message-row.is-user .chat-bubble p {
+  color: #FFFFFF;
+}
+
+.chat-timestamp {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  margin-top: 6px;
+  text-align: right;
+}
+
+.chat-message-row.is-user .chat-timestamp {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.chat-sources-block {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.chat-sources-label {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.chat-sources-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chat-source-chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--brand-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-source-chip:hover {
+  background: var(--brand-primary-subtle);
+}
+
+.chat-typing-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  margin-right: 3px;
+  animation: typingDot 1s infinite alternate;
+}
+
+@keyframes typingDot {
+  0% { opacity: 0.3; transform: scale(0.8); }
+  100% { opacity: 1; transform: scale(1.1); }
+}
+
+.chat-quick-suggestions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--bg-surface-subtle);
+  border-top: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.quick-label {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-muted);
+  align-self: center;
+}
+
+.chat-sample-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.chat-sample-btn:hover {
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+}
+
+.chat-input-form {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.chat-input-field {
+  flex: 1;
+  height: 38px;
+}
+
+.chat-send-btn {
+  height: 38px;
+  padding: 0 16px;
+}
+
+/* Dossier Overlay & Print Paper */
+.dossier-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.dossier-modal-container {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  max-width: 800px;
+  width: 100%;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dossier-toolbar {
+  padding: 12px 20px;
+  background: var(--bg-surface-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dossier-toolbar-title {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dossier-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dossier-action-btn {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.dossier-close-button {
+  padding: 4px;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dossier-close-button:hover {
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+}
+
+.dossier-paper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 36px;
+  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dossier-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dossier-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dossier-org {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dossier-classification {
   font-size: 10px;
   font-family: var(--font-mono);
   color: var(--text-muted);
 }
 
-.chat-input-bar {
+.dossier-meta-badge {
+  text-align: right;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
   display: flex;
-  gap: 8px;
-  padding: 14px 20px;
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  flex-direction: column;
 }
 
-.chat-input-bar input {
+.dossier-category-pill {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  background: var(--brand-primary-subtle);
+  color: var(--brand-primary);
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.dossier-subject-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.dossier-query {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.dossier-query-label {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.dossier-radar-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.dossier-radar-card {
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+}
+
+.dossier-section-eyebrow {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.dossier-urgency-banner {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dossier-urgency-banner.urgency-critical {
+  background: var(--status-high-bg);
+  color: var(--status-high-text);
+  border: 1px solid var(--status-high-border);
+}
+
+.dossier-urgency-banner.urgency-moderate {
+  background: var(--status-med-bg);
+  color: var(--status-med-text);
+  border: 1px solid var(--status-med-border);
+}
+
+.dossier-urgency-banner.urgency-routine {
+  background: var(--status-verified-bg);
+  color: var(--status-verified-text);
+  border: 1px solid var(--status-verified-border);
+}
+
+.dossier-volatility-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.volatility-score-text strong {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.volatility-score-text span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.volatility-meter-track {
   flex: 1;
+  height: 6px;
+  background: var(--border-subtle);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.volatility-meter-fill {
+  height: 100%;
+}
+
+.volatility-meter-fill.fill-critical { background: var(--status-high-dot); }
+.volatility-meter-fill.fill-moderate { background: var(--status-med-dot); }
+.volatility-meter-fill.fill-routine { background: var(--status-verified-dot); }
+
+.dossier-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dossier-section-heading {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 6px;
+}
+
+.dossier-summary-box {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.dossier-primary-source {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--brand-primary);
+}
+
+.dossier-action-callout {
+  background: var(--status-med-bg);
+  border: 1px solid var(--status-med-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--status-med-text);
+}
+
+/* Deadlines Table */
+.dossier-deadlines-table {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.table-header-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 140px;
+  background: var(--bg-surface-elevated);
+  font-weight: 600;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.table-data-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 140px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  align-items: center;
+}
+
+.table-data-row:last-child {
+  border-bottom: none;
+}
+
+.table-urgency-cell {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  display: inline-block;
+  width: fit-content;
+}
+
+.table-urgency-cell.urgency-high,
+.table-urgency-cell.urgency-critical {
+  background: var(--status-high-bg);
+  color: var(--status-high-text);
+}
+
+.table-date-cell {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--brand-primary);
+}
+
+.dossier-highlights-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dossier-highlights-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.dossier-badge-pill {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  background: var(--bg-surface-elevated);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.dossier-diffs-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dossier-diff-item {
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+}
+
+.dossier-diff-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.dossier-diff-date {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.dossier-diff-impact {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+}
+
+.dossier-diff-impact.impact-high {
+  background: var(--status-high-bg);
+  color: var(--status-high-text);
+}
+
+.dossier-diff-summary strong {
+  font-size: 13px;
+  color: var(--text-primary);
+  display: block;
+}
+
+.dossier-diff-summary p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.dossier-diff-sources {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  display: flex;
+  gap: 6px;
+}
+
+.dossier-sources-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.dossier-source-card {
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dossier-source-type {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--brand-primary);
+}
+
+.dossier-source-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.dossier-source-footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.dossier-footer {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.seal-line {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dossier-page-meta {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Spin animation utility */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+  animation: spin 0.8s linear infinite;
 }
 
 /* Profile Modal Tabs */
