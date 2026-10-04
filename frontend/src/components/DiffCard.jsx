@@ -1,4 +1,13 @@
 import React, { useState } from 'react';
+import {
+  IconAlertTriangle,
+  IconCheck,
+  IconExternalLink,
+  IconShield,
+  IconFileText,
+  IconUser,
+  IconChevronDown,
+} from './Icons.jsx';
 
 function parseStructuredChange(change) {
   if (change?.structured && typeof change.structured === 'object') {
@@ -79,7 +88,6 @@ export default function DiffCard({ change, compact = false }) {
 
   const impact = structured.impact || 'MEDIUM';
   const impactClass = impact === 'HIGH' ? 'is-high' : impact === 'MEDIUM' ? 'is-medium' : 'is-low';
-  const impactIcon = impact === 'HIGH' ? '🔴' : impact === 'MEDIUM' ? '🟠' : '🟡';
 
   const sources = structured.evidence?.length > 0
     ? structured.evidence
@@ -96,7 +104,13 @@ export default function DiffCard({ change, compact = false }) {
       <header className="diff-topline">
         <div className="diff-topline-left">
           <span className={`diff-impact-pill ${impactClass}`}>
-            <span className="impact-beacon" aria-hidden="true">{impactIcon}</span>
+            <span className="impact-beacon" aria-hidden="true">
+              <span className="live-dot" style={{
+                backgroundColor: impact === 'HIGH' ? 'var(--status-high-dot)' : impact === 'MEDIUM' ? 'var(--status-med-dot)' : 'var(--status-low-dot)',
+                width: '6px',
+                height: '6px',
+              }} />
+            </span>
             <span>{impact} IMPACT</span>
           </span>
           <time className="diff-time" dateTime={change.detectedAt}>
@@ -115,20 +129,21 @@ export default function DiffCard({ change, compact = false }) {
           title="Why am I seeing this change?"
           aria-expanded={showWhy}
         >
-          <span>{showWhy ? '✕ Close rationale' : '❓ Why am I seeing this?'}</span>
+          <span>{showWhy ? 'Hide rationale' : 'Why this alert?'}</span>
+          <IconChevronDown size={13} style={{ transform: showWhy ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
         </button>
       </header>
 
       {showWhy && (
         <aside className="diff-why-card">
-          <div className="diff-why-title">Why am I seeing this?</div>
+          <div className="diff-why-title">Alert Verification Rationale</div>
           <ul className="diff-why-list">
             {(structured.whyAmISeeingThis || [
               `Matches your query preferences.`,
               `Detected in verified public intelligence index.`
             ]).map((reason, idx) => (
               <li key={idx}>
-                <span className="why-check">✓</span>
+                <IconCheck size={13} className="why-check" />
                 <span>{reason}</span>
               </li>
             ))}
@@ -143,12 +158,12 @@ export default function DiffCard({ change, compact = false }) {
         {(structured.before || structured.after) && (
           <div className="diff-comparison-grid">
             <div className="diff-box diff-box-before">
-              <span className="diff-box-label">BEFORE</span>
+              <span className="diff-box-label">PREVIOUS STATE</span>
               <span className="diff-box-value">{structured.before || '—'}</span>
             </div>
-            <div className="diff-comparison-arrow">→</div>
+            <div className="diff-comparison-arrow" aria-hidden="true">→</div>
             <div className="diff-box diff-box-after">
-              <span className="diff-box-label">AFTER</span>
+              <span className="diff-box-label">VERIFIED UPDATE</span>
               <span className="diff-box-value">{structured.after || '—'}</span>
             </div>
           </div>
@@ -157,7 +172,7 @@ export default function DiffCard({ change, compact = false }) {
         <div className="diff-meta-row">
           {structured.whyItMatters && (
             <div className="diff-meta-item">
-              <span className="meta-icon">💡</span>
+              <span className="meta-icon"><IconFileText size={14} /></span>
               <div>
                 <strong>Why it matters:</strong> {structured.whyItMatters}
               </div>
@@ -165,7 +180,7 @@ export default function DiffCard({ change, compact = false }) {
           )}
           {structured.whoIsAffected && (
             <div className="diff-meta-item">
-              <span className="meta-icon">👥</span>
+              <span className="meta-icon"><IconUser size={14} /></span>
               <div>
                 <strong>Who is affected:</strong> {structured.whoIsAffected}
               </div>
@@ -175,7 +190,7 @@ export default function DiffCard({ change, compact = false }) {
 
         {structured.actionRequired && (
           <div className="diff-action-banner">
-            <span className="action-icon">⚠️</span>
+            <span className="action-icon"><IconAlertTriangle size={15} /></span>
             <div className="action-text">
               <strong>Action Recommended:</strong> {structured.actionRequired}
             </div>
@@ -193,7 +208,7 @@ export default function DiffCard({ change, compact = false }) {
                 className="evidence-toggle-btn"
                 onClick={() => setShowAllSources((v) => !v)}
               >
-                {showAllSources ? 'Show fewer' : `+${sources.length - 2} more`}
+                {showAllSources ? 'Show fewer' : `+${sources.length - 2} more sources`}
               </button>
             )}
           </div>
@@ -203,6 +218,7 @@ export default function DiffCard({ change, compact = false }) {
                 <div className="evidence-card-top">
                   <div className="evidence-source-info">
                     <span className={`source-type-pill ${src.sourceType === 'Official Portal' ? 'is-official' : ''}`}>
+                      {src.sourceType === 'Official Portal' && <IconShield size={11} style={{ marginRight: '3px' }} />}
                       {src.sourceType || 'Source'}
                     </span>
                     <span className="evidence-domain">{src.domain}</span>
@@ -215,7 +231,8 @@ export default function DiffCard({ change, compact = false }) {
                     className="view-source-btn"
                     title={`Open ${src.url}`}
                   >
-                    View Source ↗
+                    <span>View Record</span>
+                    <IconExternalLink size={12} />
                   </a>
                 </div>
                 {src.title && <div className="evidence-title">{src.title}</div>}
