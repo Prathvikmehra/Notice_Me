@@ -13,12 +13,14 @@ import {
 } from './Icons.jsx';
 
 const PRESET_AVATARS = [
-  { id: 'radar', icon: 'RADAR', label: 'Radar' },
-  { id: 'gazette', icon: 'NOTICE', label: 'Notice' },
-  { id: 'spark', icon: 'INTEL', label: 'Intel' },
-  { id: 'owl', icon: 'WATCH', label: 'Watcher' },
-  { id: 'scholar', icon: 'SCHOLAR', label: 'Scholar' },
-  { id: 'shield', icon: 'SENTINEL', label: 'Sentinel' },
+  { id: 'owl', icon: '🦉', label: 'Watcher' },
+  { id: 'gazette', icon: '📰', label: 'Gazette' },
+  { id: 'institution', icon: '🏛️', label: 'Civic' },
+  { id: 'justice', icon: '⚖️', label: 'Compliance' },
+  { id: 'scholar', icon: '🎓', label: 'Scholar' },
+  { id: 'sentinel', icon: '🛡️', label: 'Sentinel' },
+  { id: 'executive', icon: '💼', label: 'Executive' },
+  { id: 'investigator', icon: '🕵️', label: 'Auditor' },
 ];
 
 export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUpdated }) {
@@ -260,7 +262,7 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
                   {avatar?.startsWith('data:image') || avatar?.startsWith('http') ? (
                     <img src={avatar} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : avatar ? (
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 700 }}>{avatar}</div>
+                    <div style={{ fontSize: '30px', lineHeight: 1 }}>{avatar}</div>
                   ) : (
                     <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-secondary)' }}>{initial}</div>
                   )}
@@ -296,26 +298,28 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
                     )}
                   </div>
                   <small style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                    Upload JPEG, PNG or WebP. Automatically square cropped.
+                    Upload an image or choose a professional persona below.
                   </small>
                 </div>
               </div>
 
-              {/* Preset Monograms */}
+              {/* Preset Personas */}
               <div className="profile-section-block" style={{ marginBottom: '20px' }}>
-                <div className="section-label">MONOGRAM IDENTIFIERS</div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                <div className="section-label">AVATAR PERSONA</div>
+                <div className="avatar-presets-grid">
                   {PRESET_AVATARS.map((p) => {
                     const isSelected = avatar === p.icon;
                     return (
                       <button
                         key={p.id}
                         type="button"
-                        className={`filter-pill ${isSelected ? 'is-active' : ''}`}
+                        className={`avatar-preset-item ${isSelected ? 'is-selected' : ''}`}
                         onClick={() => saveAvatar(p.icon)}
-                        style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}
+                        title={p.label}
+                        aria-label={p.label}
                       >
-                        {p.icon}
+                        <span className="avatar-preset-symbol">{p.icon}</span>
+                        <span className="avatar-preset-title">{p.label}</span>
                       </button>
                     );
                   })}

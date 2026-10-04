@@ -3634,6 +3634,61 @@ input:focus, select:focus, textarea:focus {
   font-weight: 600;
 }
 
+/* Avatar Presets Grid */
+.avatar-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 480px) {
+  .avatar-presets-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.avatar-preset-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 8px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.avatar-preset-item:hover {
+  background: var(--bg-surface-subtle);
+  border-color: var(--border-default);
+  transform: translateY(-1px);
+}
+
+.avatar-preset-item.is-selected {
+  background: var(--brand-primary-subtle);
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 1px var(--brand-primary);
+}
+
+.avatar-preset-symbol {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.avatar-preset-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.avatar-preset-item.is-selected .avatar-preset-title {
+  color: var(--brand-primary);
+}
+
 /* --------------------------------------------------------------------------
    14. LoginPage
    -------------------------------------------------------------------------- */
