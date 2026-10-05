@@ -9,9 +9,46 @@ import {
   IconChevronDown,
 } from './Icons.jsx';
 
+function cleanExplanation(text) {
+  if (!text) return 'Change detected in official records or web index.';
+  if (!text.includes('New result:') && !text.includes('Removed result:') && !text.includes('\n')) {
+    return text.trim();
+  }
+  const rawLines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const changedLines = rawLines.filter((l) => !l.startsWith('New result:') && !l.startsWith('Removed result:'));
+  if (changedLines.length > 0) {
+    return changedLines.join(' • ');
+  }
+  const newCount = rawLines.filter((l) => l.startsWith('New result:')).length;
+  const removedCount = rawLines.filter((l) => l.startsWith('Removed result:')).length;
+  if (newCount > 0 || removedCount > 0) {
+    const parts = [];
+    if (newCount > 0) parts.push(`${newCount} new search result${newCount === 1 ? '' : 's'}`);
+    if (removedCount > 0) parts.push(`${removedCount} outdated result${removedCount === 1 ? '' : 's'} removed`);
+    return `Search index update: ${parts.join(', ')}.`;
+  }
+  return text.trim();
+}
+
+function sanitizeTextValue(val) {
+  if (!val || typeof val !== 'string') return null;
+  let s = val.trim();
+  if (s.includes('\n') || s.includes('New result:') || s.includes('Removed result:')) {
+    const lines = s.split('\n').map((l) => l.trim()).filter(Boolean);
+    const target = lines[lines.length - 1] || '';
+    s = target.includes(':') ? target.slice(target.lastIndexOf(':') + 1).trim() : target;
+  }
+  s = s.replace(/^["'`]|["'`]$/g, '').trim();
+  return s || null;
+}
+
 function parseStructuredChange(change) {
   if (change?.structured && typeof change.structured === 'object') {
-    return change.structured;
+    const s = { ...change.structured };
+    s.before = sanitizeTextValue(s.before);
+    s.after = sanitizeTextValue(s.after);
+    s.explanation = cleanExplanation(s.explanation);
+    return s;
   }
 
   const raw = change?.summary || '';
@@ -22,6 +59,15 @@ function parseStructuredChange(change) {
     try {
       const parsed = JSON.parse(text);
       if (parsed && typeof parsed.headline === 'string') {
+        parsed.before = sanitizeTextValue(parsed.before);
+        parsed.after = sanitizeTextValue(parsed.after);
+        parsed.explanation = cleanExplanation(parsed.explanation);
+        if (Array.isArray(parsed.evidence)) {
+          parsed.evidence = parsed.evidence.map((ev) => ({
+            ...ev,
+            excerpt: cleanExplanation(ev.excerpt || ''),
+          }));
+        }
         return parsed;
       }
     } catch {}
@@ -35,10 +81,19 @@ function parseStructuredChange(change) {
   let before = null;
   let after = null;
   if (text.includes(' → ')) {
-    const parts = text.split(' → ');
-    before = parts[0].replace(/^.*:\s*/, '').trim();
-    after = parts[1].split('\n')[0].trim();
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    const changeLine = lines.find((l) => l.includes(' → '));
+    if (changeLine) {
+      const parts = changeLine.split(' → ');
+      const rawBefore = parts[0].includes(':')
+        ? parts[0].slice(parts[0].lastIndexOf(':') + 1).trim()
+        : parts[0].trim();
+      before = rawBefore.replace(/^["'`]|["'`]$/g, '').trim() || null;
+      after = (parts[1] || '').split('\n')[0].replace(/^["'`]|["'`]$/g, '').trim() || null;
+    }
   }
+
+  const explanation = cleanExplanation(text);
 
   const evidence = (change?.sourceUrls || []).slice(0, 4).map((url) => {
     let domain = 'source';
@@ -49,7 +104,7 @@ function parseStructuredChange(change) {
       url,
       domain,
       sourceType: isGov ? 'Official Portal' : 'Public Web Source',
-      excerpt: text.slice(0, 160) || 'Verified intelligence match.',
+      excerpt: explanation.slice(0, 160) || 'Verified intelligence match.',
     };
   });
 
@@ -59,7 +114,7 @@ function parseStructuredChange(change) {
 
   return {
     headline: headline || 'Update Detected',
-    explanation: text || 'Change detected in official records or web index.',
+    explanation,
     before,
     after,
     whyItMatters: isCritical

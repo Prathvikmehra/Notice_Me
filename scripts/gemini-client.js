@@ -208,10 +208,34 @@ Rules:
     let before = null;
     let after = null;
     if (text.includes(' → ')) {
-      const parts = text.split(' → ');
-      before = parts[0].replace(/^.*:\s*/, '').trim();
-      after = parts[1].split('\n')[0].replace(/^.*:\s*/, '').trim();
+      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+      const changeLine = lines.find((l) => l.includes(' → '));
+      if (changeLine) {
+        const parts = changeLine.split(' → ');
+        const rawBefore = parts[0].includes(':')
+          ? parts[0].slice(parts[0].lastIndexOf(':') + 1).trim()
+          : parts[0].trim();
+        before = rawBefore.replace(/^["'`]|["'`]$/g, '').trim() || null;
+        after = (parts[1] || '').split('\n')[0].replace(/^["'`]|["'`]$/g, '').trim() || null;
+      }
     }
+
+    const cleanLines = text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('New result:') && !l.startsWith('Removed result:'));
+    let cleanExp = cleanLines.length > 0 ? cleanLines.join(' • ') : '';
+    if (!cleanExp) {
+      const newCount = (text.match(/New result:/g) || []).length;
+      const removedCount = (text.match(/Removed result:/g) || []).length;
+      if (newCount > 0 || removedCount > 0) {
+        const parts = [];
+        if (newCount > 0) parts.push(`${newCount} new search result${newCount === 1 ? '' : 's'}`);
+        if (removedCount > 0) parts.push(`${removedCount} outdated result${removedCount === 1 ? '' : 's'} removed`);
+        cleanExp = `Search index update: ${parts.join(', ')}.`;
+      }
+    }
+    const explanation = cleanExp || text || 'Public notice radar detected fresh updates in search and news feeds.';
 
     const evidence = (sourceUrls || []).slice(0, 3).map((url) => {
       let domain = 'source';
@@ -223,7 +247,7 @@ Rules:
         domain,
         sourceType: isGov ? 'Official Portal' : 'Public Web Source',
         date: null,
-        excerpt: text.slice(0, 200) || 'Verified search result match.',
+        excerpt: explanation.slice(0, 200) || 'Verified search result match.',
       };
     });
 
@@ -233,7 +257,7 @@ Rules:
 
     return {
       headline: headline || `${topic.name} Update Detected`,
-      explanation: text || 'Public notice radar detected fresh updates in search and news feeds.',
+      explanation,
       before,
       after,
       whyItMatters: isCritical
