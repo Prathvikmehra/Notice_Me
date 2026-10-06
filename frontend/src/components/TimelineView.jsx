@@ -26,6 +26,12 @@ export default function TimelineView({ diffs = [], loading }) {
   const [filter, setFilter] = useState('ALL');
   const [expandedId, setExpandedId] = useState(() => (diffs[0]?.id || null));
 
+  React.useEffect(() => {
+    if (!expandedId && diffs[0]?.id) {
+      setExpandedId(diffs[0].id);
+    }
+  }, [diffs, expandedId]);
+
   const filteredDiffs = diffs.filter((d) => {
     if (filter === 'ALL') return true;
     return getChangeImpact(d) === filter;

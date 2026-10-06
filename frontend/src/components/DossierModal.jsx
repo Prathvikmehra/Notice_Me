@@ -66,9 +66,26 @@ export default function DossierModal({ topic, briefing, diffs = [], onClose }) {
       diffs.slice(0, 5).forEach((d) => {
         const dDate = new Date(d.detectedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         md += `### Change Recorded: ${dDate}\n`;
-        md += `${d.summary}\n`;
+        let text = String(d.summary || '').trim();
+        if (text.startsWith('{') && text.endsWith('}')) {
+          try {
+            const p = JSON.parse(text);
+            if (p.headline) {
+              md += `**Update:** ${p.headline}\n`;
+              if (p.before && p.after) md += `- **Previous State:** ${p.before}\n- **Verified Update:** ${p.after}\n`;
+              if (p.whyItMatters) md += `- **Why It Matters:** ${p.whyItMatters}\n`;
+              if (p.actionRequired) md += `- **Action Required:** ${p.actionRequired}\n`;
+              text = '';
+            }
+          } catch {}
+        }
+        if (text) {
+          md += `${text}\n`;
+        }
         if (d.sourceUrls?.length) {
           md += `*Sources:* ${d.sourceUrls.join(', ')}\n\n`;
+        } else {
+          md += `\n`;
         }
       });
     }

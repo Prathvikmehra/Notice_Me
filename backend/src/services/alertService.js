@@ -7,6 +7,39 @@ export function isAlertConfigured(env = process.env) {
   return SMTP_NAMES.every((name) => typeof env[name] === 'string' && env[name].trim());
 }
 
+function cleanExplanation(text) {
+  if (!text || typeof text !== 'string') return '';
+  const lines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => !/^New result:|^Removed result:/i.test(l));
+  
+  if (lines.length > 0) return lines.join('\n');
+  const rawLines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const newItems = rawLines.filter((l) => /^New result:/i.test(l)).map((l) => l.replace(/^New result:\s*/i, ''));
+  const remItems = rawLines.filter((l) => /^Removed result:/i.test(l)).map((l) => l.replace(/^Removed result:\s*/i, ''));
+  const parts = [];
+  if (newItems.length > 0) parts.push(`Added sources: ${newItems.slice(0, 2).join('; ')}`);
+  if (remItems.length > 0) parts.push(`Removed sources: ${remItems.slice(0, 2).join('; ')}`);
+  return parts.join(' | ') || 'Crawler detected updated search records.';
+}
+
+function sanitizeTextValue(val) {
+  if (!val || typeof val !== 'string') return null;
+  let s = val.trim();
+  if (s.includes('\n')) {
+    const validLines = s
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .filter((l) => !/^New result:|^Removed result:/i.test(l));
+    s = validLines.length > 0 ? validLines[validLines.length - 1] : '';
+  }
+  s = s.replace(/^["'`]|["'`]$/g, '').trim();
+  return s || null;
+}
+
 export function parseDiffSummary(summary, topic = { name: 'Tracked Topic' }, sourceUrls = []) {
   if (typeof summary === 'string') {
     const trimmed = summary.trim();
@@ -14,6 +47,9 @@ export function parseDiffSummary(summary, topic = { name: 'Tracked Topic' }, sou
       try {
         const parsed = JSON.parse(trimmed);
         if (parsed && typeof parsed.headline === 'string') {
+          parsed.before = sanitizeTextValue(parsed.before);
+          parsed.after = sanitizeTextValue(parsed.after);
+          parsed.explanation = cleanExplanation(parsed.explanation);
           return parsed;
         }
       } catch {}
@@ -28,10 +64,20 @@ export function parseDiffSummary(summary, topic = { name: 'Tracked Topic' }, sou
   let before = null;
   let after = null;
   if (text.includes(' → ')) {
-    const parts = text.split(' → ');
-    before = parts[0].replace(/^.*:\s*/, '').trim();
-    after = parts[1].split('\n')[0].replace(/^.*:\s*/, '').trim();
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    const changeLine = lines.find((l) => l.includes(' → '));
+    if (changeLine) {
+      const parts = changeLine.split(' → ');
+      const rawBefore = parts[0].includes(':')
+        ? parts[0].slice(parts[0].lastIndexOf(':') + 1).trim()
+        : parts[0].trim();
+      const rawAfter = (parts[1] || '').split('\n')[0].trim();
+      before = rawBefore.replace(/^.*:\s*/, '').replace(/^["'`]|["'`]$/g, '').trim() || null;
+      after = rawAfter.replace(/^.*:\s*/, '').replace(/^["'`]|["'`]$/g, '').trim() || null;
+    }
   }
+
+  const explanation = cleanExplanation(text);
 
   const evidence = (sourceUrls || []).slice(0, 3).map((url) => {
     let domain = 'source';
@@ -42,13 +88,13 @@ export function parseDiffSummary(summary, topic = { name: 'Tracked Topic' }, sou
       url,
       domain,
       sourceType: isGov ? 'Official Portal' : 'Public Web Source',
-      excerpt: text.slice(0, 180),
+      excerpt: explanation.slice(0, 180),
     };
   });
 
   return {
     headline: text.includes('\n') ? text.split('\n')[0].replace(/^.*:\s*/, '').slice(0, 90) : (text.slice(0, 90) || `${topic.name || 'Topic'} Changed`),
-    explanation: text || 'Public notice radar detected a change.',
+    explanation: explanation || 'Public notice radar detected a change.',
     before,
     after,
     whyItMatters: isCritical ? 'Directly alters important dates, eligibility, or required action.' : 'Updates official status and latest records.',

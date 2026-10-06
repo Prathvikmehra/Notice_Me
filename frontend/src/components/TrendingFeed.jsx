@@ -72,18 +72,29 @@ export default function TrendingFeed({
 
   const hasPlaceholders = trending.some((t) => t.isPlaceholder);
 
-  // Auto-poll every 3s if currently displaying placeholders until live radar data arrives
+  // Auto-poll with backoff up to 4 attempts if currently displaying placeholders
   useEffect(() => {
     if (!hasPlaceholders || !onRefresh) return;
     let cancelled = false;
-    const interval = setInterval(async () => {
-      if (!cancelled) {
-        await onRefresh(false);
+    let attempt = 0;
+    const maxAttempts = 4;
+    let timer = null;
+
+    const poll = async () => {
+      if (cancelled || attempt >= maxAttempts) return;
+      attempt++;
+      await onRefresh(false);
+      if (!cancelled && attempt < maxAttempts) {
+        const delay = Math.min(15000, 3000 * Math.pow(1.5, attempt));
+        timer = setTimeout(poll, delay);
       }
-    }, 3000);
+    };
+
+    timer = setTimeout(poll, 3000);
+
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timer) clearTimeout(timer);
     };
   }, [hasPlaceholders, onRefresh]);
 

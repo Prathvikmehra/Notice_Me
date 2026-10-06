@@ -524,7 +524,7 @@ Rules:
    * AI Chat Assistant over monitored data (Priority 8):
    * Strictly answers user questions using stored snapshots, diff summaries, and source evidence.
    */
-  async function queryMonitoredChat({ question, topic, topics = [], diffs = [], snapshots = [], history = [] } = {}) {
+  async function queryMonitoredChat({ question, topic, topics = [], diffs = [], snapshots = [], history = [], trending = [] } = {}) {
     const q = String(question || '').trim();
     if (!q) throw new Error('Question is required.');
 
@@ -585,9 +585,32 @@ Rules:
     const contextData = {
       activeTopic: topic ? { id: topic.id, name: topic.name, query: topic.query, category: topic.category } : null,
       allTopics: topics.map((t) => ({ id: t.id, name: t.name, query: t.query })),
-      recentDiffs: diffs.slice(0, 15).map(parseStoredDiff),
-      recentSnapshots: snapshots.slice(0, 8).map(formatSnapshot),
+      recentDiffs: diffs.slice(0, 20).map(parseStoredDiff),
+      recentSnapshots: snapshots.slice(0, 15).map(formatSnapshot),
+      trendingRadar: (trending || []).slice(0, 6).map((tr) => ({
+        name: tr.name,
+        category: tr.category,
+        headline: tr.headline,
+        urgency: tr.urgency,
+        officialSource: tr.officialSource,
+      })),
     };
+
+    function getDefaultFollowUps(matchedTopic = null) {
+      const tName = matchedTopic?.name || topic?.name;
+      if (tName) {
+        return [
+          `Did any application deadlines or exam dates change for ${tName}?`,
+          `What are the verified official source portals for ${tName}?`,
+          `What practical action is required next for ${tName}?`,
+        ];
+      }
+      return [
+        'Which recent alerts have HIGH impact?',
+        'Did any application deadlines change this week?',
+        'Give me an executive briefing of my entire watchlist.',
+      ];
+    }
 
     function buildGroundedFallback(questionStr, ctx) {
       const qLower = questionStr.toLowerCase();
@@ -598,19 +621,28 @@ Rules:
         (d.topicName && d.topicName.toLowerCase().includes(qLower))
       );
       if (matchedDiff) {
-        let text = `**${matchedDiff.topicName} Update:** ${matchedDiff.headline}\n\n`;
+        let text = `### Executive Intelligence: ${matchedDiff.topicName}\n\n**Verified Update:** ${matchedDiff.headline}\n\n`;
         if (matchedDiff.before && matchedDiff.after) {
-          text += `• **Before:** ${matchedDiff.before}\n• **After:** ${matchedDiff.after}\n`;
+          text += `• **Previous State:** ${matchedDiff.before}\n• **Verified Update:** ${matchedDiff.after}\n\n`;
         }
         if (matchedDiff.whyItMatters) {
-          text += `• **Why it matters:** ${matchedDiff.whyItMatters}\n`;
+          text += `**Why It Matters:** ${matchedDiff.whyItMatters}\n\n`;
         }
         if (matchedDiff.actionRequired) {
-          text += `• **Recommended Action:** ${matchedDiff.actionRequired}\n`;
+          text += `**Recommended Action:** ${matchedDiff.actionRequired}\n\n`;
         }
         return {
           answer: text.trim(),
-          sources: (matchedDiff.sourceUrls || []).map((u) => ({ url: u })),
+          sources: (matchedDiff.sourceUrls || []).map((u) => {
+            let domain = 'source';
+            try { domain = new URL(u).hostname.replace(/^www\./, ''); } catch {}
+            return { url: u, domain };
+          }),
+          suggestedFollowUps: [
+            `What official portals verified this change?`,
+            `Are there any subsequent deadlines announced?`,
+            `Who is directly impacted by this update?`,
+          ],
           grounded: true,
         };
       }
@@ -620,28 +652,65 @@ Rules:
         const matchTopic = snap.topicName.toLowerCase().includes(qLower) || snap.topicQuery.toLowerCase().includes(qLower);
         if (matchTopic || ctx.activeTopic) {
           if (snap.aiBriefing?.status) {
+            let answer = `### Status Briefing: ${snap.topicName}\n\n${snap.aiBriefing.status}\n\n`;
+            if (snap.aiBriefing.deadlines?.length) {
+              answer += `**Key Deadlines & Milestones:**\n${snap.aiBriefing.deadlines.map((d) => `• **${d.title}**: ${d.date} (${d.urgency || 'Important'})`).join('\n')}\n\n`;
+            }
+            if (snap.aiBriefing.actionRequired) {
+              answer += `**Action Required:** ${snap.aiBriefing.actionRequired}\n\n`;
+            }
             return {
-              answer: `**Current Status for ${snap.topicName}:**\n${snap.aiBriefing.status}\n\n${snap.aiBriefing.actionRequired ? `• **Action Required:** ${snap.aiBriefing.actionRequired}\n` : ''}${snap.aiBriefing.deadlines?.length ? `• **Key Deadlines:** ${snap.aiBriefing.deadlines.map(d => `${d.title} (${d.date})`).join(', ')}` : ''}`.trim(),
-              sources: snap.topSearchSnippets.slice(0, 3).map((s) => ({ url: s.link })),
+              answer: answer.trim(),
+              sources: snap.topSearchSnippets.slice(0, 3).map((s) => {
+                let domain = 'source';
+                try { domain = new URL(s.link).hostname.replace(/^www\./, ''); } catch {}
+                return { url: s.link, domain };
+              }),
+              suggestedFollowUps: [
+                `Did any dates change for ${snap.topicName}?`,
+                `What are the official candidate instructions?`,
+                `Show recent news circulars for ${snap.topicName}.`,
+              ],
               grounded: true,
             };
           }
           if (snap.topNewsBulletins.length || snap.topSearchSnippets.length) {
             const topItem = snap.topNewsBulletins[0] || snap.topSearchSnippets[0];
             return {
-              answer: `**Latest Intelligence for ${snap.topicName}:**\n${topItem.title}${topItem.snippet ? `\n\n"${topItem.snippet}"` : ''}\n\n*No breaking changes detected yet. Continuous radar is actively monitoring official sources.*`,
-              sources: [topItem.link].filter(Boolean).map((u) => ({ url: u })),
+              answer: `### Verified Baseline: ${snap.topicName}\n\n**${topItem.title}**\n\n${topItem.snippet ? `> "${topItem.snippet}"\n\n` : ''}*Notice Me continuous radar is actively tracking official gazettes, portals, and news releases for updates.*`.trim(),
+              sources: [topItem.link].filter(Boolean).map((u) => {
+                let domain = 'source';
+                try { domain = new URL(u).hostname.replace(/^www\./, ''); } catch {}
+                return { url: u, domain };
+              }),
+              suggestedFollowUps: getDefaultFollowUps(ctx.activeTopic),
               grounded: true,
             };
           }
         }
       }
 
-      // 3. General overview
+      // 3. Trending radar fallback
+      if (qLower.includes('trend') && ctx.trendingRadar.length > 0) {
+        const trendList = ctx.trendingRadar.map((tr) => `• **${tr.name}** (${tr.category.toUpperCase()}): ${tr.headline}`).join('\n');
+        return {
+          answer: `### Public Intelligence Trending Radar\n\nLive surge notices currently tracked across India:\n\n${trendList}\n\n*Click "Trending Radar" in your sidebar to track any of these notices directly into your watchlist.*`,
+          sources: [],
+          suggestedFollowUps: [
+            'Which trending notices are marked CRITICAL?',
+            'What changed this week across my watchlist?',
+            'Summarize my active notices.',
+          ],
+          grounded: true,
+        };
+      }
+
+      // 4. General overview
       if (ctx.allTopics.length > 0) {
         return {
-          answer: `I am actively monitoring **${ctx.allTopics.length} topic(s)** for you: ${ctx.allTopics.map(t => t.name).join(', ')}.\n\nAsk me about the status, deadlines, or recent changes for any of these notices!`,
+          answer: `### Active Watchlist Overview\n\nNotice Me radar is currently active across **${ctx.allTopics.length} topic(s)**:\n\n${ctx.allTopics.map((t) => `• **${t.name}** (\`${t.query}\`)`).join('\n')}\n\nAsk me about current status, recent before/after changes, or upcoming deadlines!`,
           sources: [],
+          suggestedFollowUps: getDefaultFollowUps(),
           grounded: true,
         };
       }
@@ -649,6 +718,7 @@ Rules:
       return {
         answer: "I cannot find this information in your monitored topics or recorded updates.",
         sources: [],
+        suggestedFollowUps: getDefaultFollowUps(),
         grounded: false,
       };
     }
@@ -661,51 +731,94 @@ Rules:
       ? `Prior Conversation:\n${history.map((h) => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n')}\n\n`
       : '';
 
-    const prompt = `You are Notice Me AI Analyst, an intelligent grounded copilot for monitored Indian public notices, exams, and schemes.
-Answer the user's question directly, accurately, and helpfully using ONLY the facts and updates in the Monitored Data Context.
+    const prompt = `You are Notice Me AI Intelligence Analyst, a senior executive copilot monitoring Indian public notices, exams, government schemes, court verdicts, and recruitment portals.
+
+Answer the user's question with authority, precision, and clarity using ONLY the facts and records in the Monitored Data Context.
 
 ${conversationPrompt}User Question: "${q}"
 
 Monitored Data Context:
 ${JSON.stringify(contextData, null, 2)}
 
-Strict Grounding & Answer Rules:
-1. Ground your answer in the Monitored Data Context. Utilize both the recent change diffs AND the latest snapshot search/news snippets and briefings.
-2. If there are no diffs recorded yet (initial baseline), explain the current verified status from the latest search snippets or news bulletins.
-3. If specific information (like an unannounced date or unknown detail) is not in the context, explicitly say:
+Strict Intelligence Analyst Guidelines:
+1. Grounding: Answer strictly using facts and verified records from the context. If specific details are not in the context, explicitly say:
    "I cannot find this information in your monitored topics or recorded updates."
-4. Highlight key dates, Before → After changes, and practical impacts clearly.
-5. Format your response cleanly with markdown bolding (**date / topic**), bullet lists, and section headers where appropriate.
-6. Include any relevant source URLs directly in your answer so the user can verify them.`;
+2. Executive Structure:
+   - Provide an immediate, clear executive takeaway.
+   - Use bold highlights for key dates, status changes, and critical numbers (**Date**, **₹Amount**, **Deadline**).
+   - If a change is recorded, present a clean comparison:
+     • **Previous State:** [old status/date]
+     • **Verified Update:** [new status/date]
+   - Detail practical impact: who is affected, and what action is required.
+   - Cite official domains where relevant (e.g. upsc.gov.in, pmkisan.gov.in, sci.gov.in).
+3. Brevity & Density: Be concise and dense with facts. No filler, greetings, or generic boilerplate.
+4. Suggested Follow-ups:
+   At the very end of your response, output exactly one line in this format:
+   SUGGESTED_FOLLOW_UPS: Short question 1? | Short question 2? | Short question 3?`;
 
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.2,
-        maxOutputTokens: 750,
+        maxOutputTokens: 1500,
       },
     };
 
-    const answerText = await callGemini(payload);
-    if (!answerText) {
+    const answerRaw = await callGemini(payload);
+    if (!answerRaw) {
       return buildGroundedFallback(q, contextData);
     }
 
-    // Extract any URLs cited or referenced
+    let answerText = answerRaw.trim();
+    let suggestedFollowUps = [];
+    const followUpMatch = answerText.match(/SUGGESTED_FOLLOW_UPS:\s*(.+)$/m);
+    if (followUpMatch) {
+      suggestedFollowUps = followUpMatch[1]
+        .split('|')
+        .map((s) => s.trim().replace(/^[-•*]\s*/, ''))
+        .filter((s) => s.length > 4 && s.length < 85)
+        .slice(0, 3);
+      answerText = answerText.replace(/SUGGESTED_FOLLOW_UPS:\s*.+$/m, '').trim();
+    }
+    if (suggestedFollowUps.length === 0) {
+      suggestedFollowUps = getDefaultFollowUps(contextData.activeTopic);
+    }
+
+    // Extract any URLs cited or referenced in answer text
     const citedUrls = [];
     const urlRegex = /https?:\/\/[^\s)\]]+/g;
     let match;
     while ((match = urlRegex.exec(answerText)) !== null) {
-      citedUrls.push(match[0]);
+      const cleanUrl = match[0].replace(/[.,;:)]+$/, '');
+      if (!citedUrls.includes(cleanUrl)) citedUrls.push(cleanUrl);
     }
 
+    // Gather context evidence sources
+    const contextSources = [];
+    for (const d of contextData.recentDiffs) {
+      for (const u of d.sourceUrls || []) {
+        if (!contextSources.includes(u)) contextSources.push(u);
+      }
+    }
+    for (const s of contextData.recentSnapshots) {
+      for (const item of s.topSearchSnippets || []) {
+        if (item.link && !contextSources.includes(item.link)) contextSources.push(item.link);
+      }
+      for (const item of s.topNewsBulletins || []) {
+        if (item.link && !contextSources.includes(item.link)) contextSources.push(item.link);
+      }
+    }
+
+    const mergedUrls = [...new Set([...citedUrls, ...contextSources])].slice(0, 6);
+
     return {
-      answer: answerText.trim(),
-      sources: [...new Set(citedUrls)].slice(0, 5).map((url) => {
+      answer: answerText,
+      sources: mergedUrls.map((url) => {
         let domain = 'source';
         try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch {}
         return { url, domain };
       }),
+      suggestedFollowUps,
       grounded: true,
     };
   }

@@ -280,16 +280,17 @@ export function createTopicsRouter(database = getDb) {
         where: topicId ? { topicId } : { topic: { userId: req.user.id } },
         include: { topic: { select: { id: true, name: true } } },
         orderBy: { detectedAt: 'desc' },
-        take: 15,
+        take: 20,
       }),
       client.snapshot.findMany({
         where: topicId ? { topicId } : { topic: { userId: req.user.id } },
         include: { topic: { select: { id: true, name: true, query: true, category: true } } },
         orderBy: { pulledAt: 'desc' },
-        take: 10,
+        take: 25,
       }),
     ]);
 
+    const trending = getCachedTrending();
     const gemini = getGeminiClient();
     const result = await gemini.queryMonitoredChat({
       question,
@@ -298,6 +299,7 @@ export function createTopicsRouter(database = getDb) {
       diffs,
       snapshots,
       history,
+      trending,
     });
 
     res.json(result);
@@ -350,26 +352,6 @@ export function createTopicsRouter(database = getDb) {
           console.warn(`[Alert] Confirmation email failed for topic "${topic.name}":`, err.message);
         });
       }
-
-      // 2. Schedule 10-minute check & email only if alerts are explicitly enabled
-      const delay = Number(process.env.INITIAL_ALERT_DELAY_MS || 10 * 60 * 1000);
-      setTimeout(async () => {
-        try {
-          const fresh = await activeDb.topic.findUnique({ where: { id: topic.id } });
-          if (fresh && fresh.alertEmail && fresh.alertEnabled && !fresh.lastAlertedAt) {
-            const syncResult = await syncTopic(fresh.id, activeDb);
-            if (!syncResult.diff && isAlertConfigured()) {
-              await alertService.sendInitialAlert(fresh, syncResult.snapshot);
-            }
-            await activeDb.topic.update({
-              where: { id: fresh.id },
-              data: { lastAlertedAt: new Date() },
-            });
-          }
-        } catch (err) {
-          console.error(`10-minute alert failed for topic ${topic.id}:`, err.message);
-        }
-      }, delay);
     }
     res.status(201).json({ topic });
   }));
@@ -435,6 +417,9 @@ export function createTopicsRouter(database = getDb) {
     const topic = await client.topic.findUnique({ where: { id: req.params.id } });
     if (!topic) throw problem(404, 'Topic not found.');
     if (topic.userId !== req.user.id) throw problem(403, 'You do not own this topic.');
+    if (isTopicSyncing(topic.id)) {
+      throw problem(409, 'Topic is currently syncing live data. Please wait a moment before deleting.');
+    }
     await client.$transaction(async (tx) => {
       await tx.diff.deleteMany({ where: { topicId: topic.id } });
       await tx.snapshot.deleteMany({ where: { topicId: topic.id } });

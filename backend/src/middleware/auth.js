@@ -4,14 +4,6 @@ import { getDb } from '../services/db.js';
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
 
-let sharedSupabase = null;
-function getSupabase() {
-  if (!sharedSupabase && supabaseUrl && supabaseKey) {
-    sharedSupabase = createClient(supabaseUrl, supabaseKey);
-  }
-  return sharedSupabase;
-}
-
 // User memory cache: token -> { user, expiresAt }
 const userCache = new Map();
 const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
@@ -34,10 +26,11 @@ export async function requireAuth(req, res, next) {
     const { data: { user }, error } = await supabase.auth.getUser();
     if (error || !user) return res.status(401).json({ error: { message: 'Invalid or expired token.' } });
     const db = typeof req.db === 'function' ? req.db() : getDb();
+    const email = user.email || `${user.id}@noticeme.local`;
     const dbUser = await db.user.upsert({
       where: { id: user.id },
-      update: { email: user.email },
-      create: { id: user.id, email: user.email, name: user.user_metadata?.name || null },
+      update: { email },
+      create: { id: user.id, email, name: user.user_metadata?.name || null },
     });
 
     userCache.set(token, { user: dbUser, expiresAt: Date.now() + CACHE_TTL_MS });
@@ -54,6 +47,18 @@ export async function requireAuth(req, res, next) {
     next();
   } catch {
     return res.status(401).json({ error: { message: 'Authentication failed.' } });
+  }
+}
+
+export function invalidateUserCache(identifier = null) {
+  if (!identifier) {
+    userCache.clear();
+    return;
+  }
+  for (const [token, entry] of userCache) {
+    if (token === identifier || entry.user?.id === identifier) {
+      userCache.delete(token);
+    }
   }
 }
 

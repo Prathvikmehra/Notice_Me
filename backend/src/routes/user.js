@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../services/db.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, invalidateUserCache } from '../middleware/auth.js';
 
 const attempt = (fn) => (req, res, next) => Promise.resolve().then(() => fn(req, res)).catch(next);
 
@@ -22,6 +22,8 @@ export function createUserRouter(database = getDb) {
     if (name !== undefined) data.name = name || null;
     if (Object.keys(data).length === 0) return res.status(400).json({ error: { message: 'Provide at least one field to update.' } });
     const user = await db().user.update({ where: { id: req.user.id }, data });
+    invalidateUserCache(req.user.id);
+    if (req.user) req.user.name = user.name;
     res.json({ user });
   }));
 
@@ -31,6 +33,7 @@ export function createUserRouter(database = getDb) {
       where: { id: req.user.id },
       data: { plan: targetPlan },
     });
+    invalidateUserCache(req.user.id);
     if (req.user) req.user.plan = targetPlan;
     res.json({
       user,

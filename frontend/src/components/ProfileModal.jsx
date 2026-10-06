@@ -115,10 +115,14 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
   const saveAvatar = async (avatarValue) => {
     setAvatar(avatarValue);
     const userId = user?.id || 'default';
-    if (avatarValue) {
-      localStorage.setItem(`notice_me_avatar_${userId}`, avatarValue);
-    } else {
-      localStorage.removeItem(`notice_me_avatar_${userId}`);
+    try {
+      if (avatarValue) {
+        localStorage.setItem(`notice_me_avatar_${userId}`, avatarValue);
+      } else {
+        localStorage.removeItem(`notice_me_avatar_${userId}`);
+      }
+    } catch (storageErr) {
+      console.warn('Could not persist avatar to localStorage:', storageErr.message);
     }
 
     // Sync to Supabase auth metadata if configured

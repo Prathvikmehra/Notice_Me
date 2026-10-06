@@ -14,7 +14,7 @@ import {
   IconBell,
 } from '../components/Icons.jsx';
 
-const STANDARD_FREQS = ['1d', '2d', '3d', '5d', '7d', '14d', '30d'];
+const STANDARD_FREQS = ['1h', '3h', '1d', '2d', '3d', '5d', '7d', '14d', '30d'];
 
 function getOrdinal(n) {
   const s = ['th', 'st', 'nd', 'rd'];
@@ -31,6 +31,8 @@ function isMonthlyCadence(freq, isCustom = false) {
 function getFrequencyLabel(freq) {
   if (!freq) return 'daily';
   const str = String(freq).toLowerCase();
+  if (str === '1h') return 'every hour';
+  if (str === '3h') return 'every 3 hours';
   if (str === '1d' || str === 'daily') return 'daily';
   if (str === '2d') return 'every 2 days';
   if (str === '3d') return 'every 3 days';
@@ -439,6 +441,8 @@ export default function TopicDetail({ topic, onDelete, onAlertChange, refreshTok
                 onChange={(e) => handleFrequencyChange(e.target.value)}
                 disabled={!enabled}
               >
+                <option value="1h">Hourly (Every hour)</option>
+                <option value="3h">Every 3 hours</option>
                 <option value="1d">Daily (Every day)</option>
                 <option value="2d">Every 2 days</option>
                 <option value="3d">Every 3 days</option>

@@ -93,6 +93,12 @@ export function getFrequencyLabel(freqStr) {
   return `every ${days} days`;
 }
 
+export function isMonthlyCadence(freqStr) {
+  if (!freqStr) return false;
+  const str = String(freqStr).toLowerCase().trim();
+  return str === '30d' || str === 'monthly' || str === '1m';
+}
+
 export default {
   FREQUENCIES_MS,
   FREQUENCIES,
@@ -100,4 +106,5 @@ export default {
   parseFrequencyToMs,
   parseFrequencyToDays,
   getFrequencyLabel,
+  isMonthlyCadence,
 };

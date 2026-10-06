@@ -4,8 +4,8 @@ import { createSerpApiClient } from './serpapi-client.js';
 import { diff } from './diff-engine.js';
 import * as alertService from '../backend/src/services/alertService.js';
 
-export { FREQUENCIES, parseFrequencyToMs } from './frequency.js';
-import { parseFrequencyToMs } from './frequency.js';
+export { FREQUENCIES, parseFrequencyToMs };
+import { FREQUENCIES, parseFrequencyToMs } from './frequency.js';
 
 
 function isAlertDue(topic) {

@@ -7,6 +7,10 @@ import {
   IconExternalLink,
   IconUser,
   IconShield,
+  IconCopy,
+  IconCheck,
+  IconRefresh,
+  IconFileText,
 } from './Icons.jsx';
 
 function renderChatMessage(text) {
@@ -18,7 +22,7 @@ function renderChatMessage(text) {
   function parseInline(str) {
     if (!str) return '';
     const parts = [];
-    const regex = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s)\]]+|\*\*([^*]+)\*\*|`([^`]+)`)/g;
+    const regex = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s)\]]+|\*\*([^*]+)\*\*|`([^`]+)`|\[(CRITICAL|HIGH IMPACT|MEDIUM IMPACT|LOW IMPACT|HIGH|MEDIUM|LOW|OFFICIAL|KEY DATE|BEFORE|AFTER|PREVIOUS STATE|VERIFIED UPDATE)\])/g;
     let lastIdx = 0;
     let match;
     let key = 0;
@@ -43,6 +47,13 @@ function renderChatMessage(text) {
         parts.push(<strong key={key++}>{match[4]}</strong>);
       } else if (match[5]) {
         parts.push(<code key={key++} className="chat-inline-code">{match[5]}</code>);
+      } else if (match[6]) {
+        const badgeType = match[6].toLowerCase().replace(/\s+/g, '-');
+        parts.push(
+          <span key={key++} className={`chat-badge-pill badge-${badgeType}`}>
+            {match[6]}
+          </span>
+        );
       }
       lastIdx = regex.lastIndex;
     }
@@ -72,10 +83,27 @@ function renderChatMessage(text) {
       return;
     }
 
+    if (trimmed.startsWith('> ')) {
+      if (currentList) {
+        elements.push(<ul key={`ul-${idx}`} className="chat-bullet-list">{currentList}</ul>);
+        currentList = null;
+      }
+      const quote = trimmed.slice(2);
+      elements.push(<blockquote key={`quote-${idx}`} className="chat-quote">{parseInline(quote)}</blockquote>);
+      return;
+    }
+
     if (trimmed.startsWith('• ') || trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
       const itemText = trimmed.replace(/^[•\-*]\s*/, '');
       if (!currentList) currentList = [];
       currentList.push(<li key={`li-${idx}`}>{parseInline(itemText)}</li>);
+      return;
+    }
+
+    const numMatch = trimmed.match(/^(\d+)\.\s+(.+)$/);
+    if (numMatch) {
+      if (!currentList) currentList = [];
+      currentList.push(<li key={`li-${idx}`} value={Number(numMatch[1])}>{parseInline(numMatch[2])}</li>);
       return;
     }
 
@@ -95,32 +123,60 @@ function renderChatMessage(text) {
 }
 
 export default function AIChatModal({ isOpen, onClose, activeTopic = null, topics = [] }) {
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      text: activeTopic
-        ? `Hello! I am your Notice Me AI Analyst. Ask me anything about changes, deadlines, or official source evidence for **${activeTopic.name}**.`
-        : `Hello! I am your Notice Me AI Analyst. Ask me anything about recent shifts, deadlines, or official notices across your monitored topics.`,
-      sources: [],
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    },
-  ]);
+  const [selectedTopicId, setSelectedTopicId] = useState(activeTopic?.id || 'all');
+
+  useEffect(() => {
+    if (activeTopic?.id) {
+      setSelectedTopicId(activeTopic.id);
+    } else {
+      setSelectedTopicId('all');
+    }
+  }, [activeTopic, isOpen]);
+
+  const effectiveTopic = selectedTopicId === 'all'
+    ? null
+    : (topics.find((t) => t.id === selectedTopicId) || activeTopic);
+
+  const buildInitialGreeting = (topicObj) => ({
+    role: 'assistant',
+    text: topicObj
+      ? `Hello! I am your Notice Me AI Intelligence Analyst. Ask me anything about verified circulars, timeline shifts, or official source citations for **${topicObj.name}**.`
+      : `Hello! I am your Notice Me AI Intelligence Analyst. Ask me anything about recent shifts, deadlines, or official notices across your monitored topics.`,
+    sources: [],
+    suggestedFollowUps: topicObj
+      ? [
+          `What is the latest verified status of ${topicObj.name}?`,
+          `Did any application deadlines or dates change?`,
+          `What practical actions are required for ${topicObj.name}?`,
+        ]
+      : [
+          'What changed this week across my watchlist?',
+          'Which detected updates have HIGH impact?',
+          'Did any application deadlines change recently?',
+          'Give me an executive briefing of all notices.',
+        ],
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  });
+
+  const [messages, setMessages] = useState(() => [buildInitialGreeting(activeTopic)]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [copiedIdx, setCopiedIdx] = useState(null);
+  const [copiedTranscript, setCopiedTranscript] = useState(false);
   const messagesEndRef = useRef(null);
 
-  const sampleQuestions = activeTopic
+  const sampleQuestions = effectiveTopic
     ? [
-        `What is the latest status of ${activeTopic.name}?`,
+        `What is the latest status of ${effectiveTopic.name}?`,
         `Did any application deadlines or dates change?`,
-        `What actions are required for ${activeTopic.name}?`,
-        `Show me the latest official source updates.`,
+        `What actions are required for ${effectiveTopic.name}?`,
+        `Show verified official source citations.`,
       ]
     : [
-        'What changed this week across my topics?',
-        'Which detected changes are High Impact?',
+        'What changed this week across my watchlist?',
+        'Which detected updates have HIGH impact?',
         'Did any application deadlines or exam dates change?',
-        'Summarize the latest status of my watchlist.',
+        'Summarize the current status of my watchlist.',
       ];
 
   useEffect(() => {
@@ -130,6 +186,35 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
   }, [messages, isOpen]);
 
   if (!isOpen) return null;
+
+  const handleScopeChange = (newId) => {
+    setSelectedTopicId(newId);
+    const newTopic = newId === 'all' ? null : topics.find((t) => t.id === newId);
+    setMessages([buildInitialGreeting(newTopic)]);
+  };
+
+  const handleClearChat = () => {
+    setMessages([buildInitialGreeting(effectiveTopic)]);
+  };
+
+  const handleCopyMessage = async (text, idx) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 2000);
+    } catch {}
+  };
+
+  const handleCopyTranscript = async () => {
+    try {
+      const transcript = messages
+        .map((m) => `[${m.role.toUpperCase()} - ${m.timestamp}]\n${m.text}\n`)
+        .join('\n---\n\n');
+      await navigator.clipboard.writeText(transcript);
+      setCopiedTranscript(true);
+      setTimeout(() => setCopiedTranscript(false), 2000);
+    } catch {}
+  };
 
   async function handleSend(questionText = input) {
     const q = (questionText || '').trim();
@@ -154,7 +239,7 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
 
       const res = await askMonitoredChat({
         question: q,
-        topicId: activeTopic?.id || null,
+        topicId: effectiveTopic?.id || null,
         history: historyPayload,
       });
 
@@ -162,6 +247,7 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
         role: 'assistant',
         text: res.answer || 'No response returned from analyst.',
         sources: res.sources || [],
+        suggestedFollowUps: res.suggestedFollowUps || [],
         grounded: res.grounded !== false,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
@@ -171,6 +257,7 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
         role: 'assistant',
         text: `Error querying monitored intelligence: ${err.message}`,
         sources: [],
+        suggestedFollowUps: [],
         grounded: false,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
@@ -189,20 +276,57 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
               <IconSparkles size={16} />
             </span>
             <div>
-              <h3>AI Intelligence Analyst</h3>
-              <p className="chat-sub">
-                {activeTopic ? `Focused on: ${activeTopic.name}` : `Querying across ${topics.length} monitored topics`}
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3>AI Intelligence Analyst</h3>
+                <span className="chat-model-badge">VERIFIED RADAR</span>
+              </div>
+              <div className="chat-scope-bar">
+                <span className="chat-scope-label">Focus:</span>
+                <select
+                  className="chat-scope-select"
+                  value={selectedTopicId}
+                  onChange={(e) => handleScopeChange(e.target.value)}
+                  disabled={loading}
+                >
+                  <option value="all">All Monitored Topics ({topics.length})</option>
+                  {topics.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
-          <button type="button" className="chat-close-btn" onClick={onClose} aria-label="Close chat">
-            <IconX size={16} />
-          </button>
+          <div className="chat-header-actions">
+            <button
+              type="button"
+              className="chat-tool-btn"
+              onClick={handleCopyTranscript}
+              title="Copy entire chat transcript"
+            >
+              {copiedTranscript ? <IconCheck size={13} /> : <IconFileText size={13} />}
+              <span>{copiedTranscript ? 'Copied' : 'Export'}</span>
+            </button>
+            <button
+              type="button"
+              className="chat-tool-btn"
+              onClick={handleClearChat}
+              title="Reset conversation"
+              disabled={loading || messages.length <= 1}
+            >
+              <IconRefresh size={13} />
+              <span>Reset</span>
+            </button>
+            <button type="button" className="chat-close-btn" onClick={onClose} aria-label="Close chat">
+              <IconX size={16} />
+            </button>
+          </div>
         </header>
 
         <div className="chat-grounding-banner">
           <IconShield size={13} style={{ color: 'var(--status-verified-dot)', flexShrink: 0 }} />
-          <span>Strictly grounded: Answers only from verified database snapshots and diffs. Zero hallucinations.</span>
+          <span>Strictly grounded: Answers synthesize verified official circulars, gazettes, and crawler diffs. Zero hallucinations.</span>
         </div>
 
         <div className="chat-messages-scroll">
@@ -215,9 +339,10 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
                 <div className="chat-bubble-text">
                   {renderChatMessage(msg.text)}
                 </div>
+
                 {msg.sources?.length > 0 && (
                   <div className="chat-sources-block">
-                    <span className="chat-sources-label">Sources Cited:</span>
+                    <span className="chat-sources-label">Verified Citations:</span>
                     <div className="chat-sources-chips">
                       {msg.sources.map((s, idx) => (
                         <a
@@ -226,6 +351,7 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
                           target="_blank"
                           rel="noopener noreferrer"
                           className="chat-source-chip"
+                          title={s.url}
                         >
                           <span>{s.domain || 'Source'}</span>
                           <IconExternalLink size={10} />
@@ -234,10 +360,45 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
                     </div>
                   </div>
                 )}
-                <div className="chat-timestamp">{msg.timestamp}</div>
+
+                {msg.role === 'assistant' && msg.suggestedFollowUps?.length > 0 && (
+                  <div className="chat-followups-inline">
+                    <span className="chat-followups-label">Suggested follow-ups:</span>
+                    <div className="chat-followups-list">
+                      {msg.suggestedFollowUps.map((fu, fIdx) => (
+                        <button
+                          key={fIdx}
+                          type="button"
+                          className="chat-followup-pill"
+                          onClick={() => handleSend(fu)}
+                          disabled={loading}
+                        >
+                          <span>{fu}</span>
+                          <span aria-hidden="true">→</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="chat-bubble-footer">
+                  {msg.role === 'assistant' && (
+                    <button
+                      type="button"
+                      className="chat-copy-msg-btn"
+                      onClick={() => handleCopyMessage(msg.text, i)}
+                      title="Copy response"
+                    >
+                      {copiedIdx === i ? <IconCheck size={11} /> : <IconCopy size={11} />}
+                      <span>{copiedIdx === i ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  )}
+                  <span className="chat-timestamp">{msg.timestamp}</span>
+                </div>
               </div>
             </div>
           ))}
+
           {loading && (
             <div className="chat-message-row is-assistant">
               <div className="chat-avatar"><IconSparkles size={13} /></div>
@@ -246,7 +407,7 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
                 <span className="chat-typing-dot" />
                 <span className="chat-typing-dot" />
                 <span style={{ marginLeft: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>
-                  Analyzing verified snapshots…
+                  Analyzing verified snapshots & official citations…
                 </span>
               </div>
             </div>
@@ -255,7 +416,7 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
         </div>
 
         <div className="chat-quick-suggestions">
-          <span className="quick-label">Suggested:</span>
+          <span className="quick-label">Prompt Starters:</span>
           {sampleQuestions.map((sq, idx) => (
             <button
               key={idx}
@@ -278,8 +439,9 @@ export default function AIChatModal({ isOpen, onClose, activeTopic = null, topic
             className="chat-input-field"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={activeTopic ? `Ask about ${activeTopic.name}…` : 'Ask anything about your monitored topics…'}
+            placeholder={effectiveTopic ? `Ask about ${effectiveTopic.name}…` : 'Ask anything about your monitored topics…'}
             disabled={loading}
+            autoFocus
           />
           <button
             type="submit"
