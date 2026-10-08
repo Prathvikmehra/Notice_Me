@@ -269,7 +269,7 @@ h1, h2, h3, h4, .editorial-heading {
   gap: 5px;
   margin-left: 5px;
   background: var(--brand-primary);
-  color: #FFFFFF;
+  color: var(--text-inverse);
   padding: 1px 7px;
   border-radius: var(--radius-pill);
   font-size: 0.8em;
@@ -421,7 +421,7 @@ h1, h2, h3, h4, .editorial-heading {
 
 .sidebar-nav-tab.is-active .sidebar-nav-badge {
   background: var(--brand-primary);
-  color: #FFFFFF;
+  color: var(--text-inverse);
 }
 
 .sidebar-nav-count {
@@ -524,7 +524,7 @@ h1, h2, h3, h4, .editorial-heading {
 
 .topic-link.selected .topic-icon {
   background: var(--brand-primary);
-  color: #FFFFFF;
+  color: var(--text-inverse);
 }
 
 .topic-link-text {
@@ -783,7 +783,7 @@ h1, h2, h3, h4, .editorial-heading {
 
 .topbar-chat-btn:hover {
   background: var(--brand-primary);
-  color: #FFFFFF;
+  color: var(--text-inverse);
 }
 
 .plan-toggle-pill {
@@ -866,23 +866,26 @@ h1, h2, h3, h4, .editorial-heading {
 
 .button-primary {
   background-color: var(--brand-primary);
-  color: #FFFFFF;
+  color: var(--text-inverse);
+  font-weight: 600;
 }
 
 .button-primary:hover:not(:disabled) {
   background-color: var(--brand-primary-hover);
+  color: var(--text-inverse);
   box-shadow: 0 0 14px var(--brand-glow), var(--shadow-sm);
 }
 
 .button-quiet {
   background-color: var(--bg-surface);
   color: var(--text-secondary);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
 }
 
 .button-quiet:hover:not(:disabled) {
   background-color: var(--bg-surface-elevated);
   color: var(--text-primary);
+  border-color: var(--border-strong);
 }
 
 .button-danger {
@@ -905,7 +908,7 @@ h1, h2, h3, h4, .editorial-heading {
 
 .button-sync:hover:not(:disabled) {
   background-color: var(--brand-primary);
-  color: #FFFFFF;
+  color: var(--text-inverse);
 }
 
 .button-sync.is-syncing {
@@ -1095,7 +1098,7 @@ input:focus, select:focus, textarea:focus {
 
 .feed-pill.is-active {
   background: var(--brand-primary);
-  color: #FFFFFF;
+  color: var(--text-inverse);
   border-color: var(--brand-primary);
   font-weight: 600;
 }
@@ -1611,8 +1614,9 @@ input:focus, select:focus, textarea:focus {
 
 .filter-pill.is-active {
   background: var(--brand-primary);
-  color: #FFFFFF;
+  color: var(--text-inverse);
   border-color: var(--brand-primary);
+  font-weight: 600;
 }
 
 .filter-pill.is-high.is-active {
@@ -2897,7 +2901,7 @@ input:focus, select:focus, textarea:focus {
   right: 24px;
   z-index: 50;
   background: var(--brand-primary);
-  color: #FFFFFF;
+  color: var(--text-inverse);
   border-radius: var(--radius-pill);
   padding: 10px 18px;
   display: flex;
@@ -2911,6 +2915,7 @@ input:focus, select:focus, textarea:focus {
 
 .floating-ai-chat-btn:hover {
   background: var(--brand-primary-hover);
+  color: var(--text-inverse);
   transform: translateY(-2px);
   box-shadow: var(--shadow-xl);
 }
@@ -3119,7 +3124,7 @@ input:focus, select:focus, textarea:focus {
 
 .chat-message-row.is-user .chat-avatar {
   background: var(--brand-primary);
-  color: #FFFFFF;
+  color: var(--text-inverse);
 }
 
 .chat-bubble {
@@ -3135,12 +3140,12 @@ input:focus, select:focus, textarea:focus {
 
 .chat-message-row.is-user .chat-bubble {
   background: var(--brand-primary);
-  color: #FFFFFF;
+  color: var(--text-inverse);
   border-color: var(--brand-primary);
 }
 
 .chat-message-row.is-user .chat-bubble p {
-  color: #FFFFFF;
+  color: var(--text-inverse);
 }
 
 .chat-timestamp {
@@ -5329,26 +5334,38 @@ input:focus, select:focus, textarea:focus {
   gap: 10px;
 }
 .landing-theme-toggle {
-  background: transparent;
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
+  padding: 6px 12px;
   font-size: 12px;
-  color: var(--text-secondary);
+  font-weight: 500;
+  color: var(--text-primary);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 .landing-theme-toggle:hover {
-  background: var(--bg-surface);
+  background: var(--bg-surface-elevated);
+  border-color: var(--border-strong);
   color: var(--text-primary);
 }
 .landing-sign-in-btn {
   font-size: 13px;
   padding: 7px 14px;
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  font-weight: 500;
+}
+.landing-sign-in-btn:hover {
+  background: var(--bg-surface-elevated);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 .landing-cta-btn {
   font-size: 13px;
   padding: 7px 16px;
+  font-weight: 600;
 }
 
 /* 📰 Hero Section */
@@ -5418,7 +5435,14 @@ input:focus, select:focus, textarea:focus {
   font-size: 14.5px;
   padding: 11px 22px;
   background: var(--bg-surface);
+  color: var(--text-primary);
   border: 1px solid var(--border-default);
+  font-weight: 500;
+}
+.hero-secondary-cta:hover {
+  background: var(--bg-surface-elevated);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 .landing-telemetry-row {
   display: flex;
@@ -5614,6 +5638,14 @@ input:focus, select:focus, textarea:focus {
 }
 .diff-panel.is-after .diff-panel-label {
   color: #027A48;
+}
+[data-theme="dark"] .diff-panel.is-before {
+  background: var(--status-high-bg);
+  border-color: var(--status-high-border);
+}
+[data-theme="dark"] .diff-panel.is-after {
+  background: var(--status-verified-bg);
+  border-color: var(--status-verified-border);
 }
 [data-theme="dark"] .diff-panel.is-before .diff-panel-label {
   color: #F87171;
@@ -5965,6 +5997,16 @@ input:focus, select:focus, textarea:focus {
   text-align: center;
   justify-content: center;
 }
+.pricing-card .pricing-cta.button-quiet {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.pricing-card .pricing-cta.button-quiet:hover {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+}
 
 /* ❓ FAQ Section */
 .faq-section {
@@ -6061,9 +6103,30 @@ input:focus, select:focus, textarea:focus {
   color: var(--text-primary);
   font-size: 15px;
   padding: 12px 28px;
+  font-weight: 600;
 }
 .cta-banner-btn:hover {
   background: var(--bg-surface-elevated);
+}
+
+[data-theme="dark"] .landing-cta-banner {
+  background: var(--bg-surface-elevated);
+  border-top: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+}
+[data-theme="dark"] .cta-banner-title {
+  color: var(--text-primary);
+}
+[data-theme="dark"] .cta-banner-desc {
+  color: var(--text-secondary);
+}
+[data-theme="dark"] .cta-banner-btn {
+  background: var(--brand-primary);
+  color: var(--text-inverse);
+}
+[data-theme="dark"] .cta-banner-btn:hover {
+  background: var(--brand-primary-hover);
+  color: var(--text-inverse);
 }
 
 /* 🏛️ Landing Footer */
