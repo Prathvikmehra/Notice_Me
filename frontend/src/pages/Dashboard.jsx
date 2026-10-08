@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { createTopic, deleteTopic, listTopics, searchTopics, getTrendingTopics, upgradePlan, getProfile } from '../api/client.js';
 import { findTopicBySlugOrId, getTopicSlug } from '../utils/slug.js';
@@ -27,6 +27,7 @@ import {
 
 export default function Dashboard() {
   const { signOut, user } = useAuth();
+  const searchInputRef = useRef(null);
   const [topics, setTopics] = useState([]);
   const [trending, setTrending] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -41,6 +42,17 @@ export default function Dashboard() {
   const [showProModal, setShowProModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [refreshingTrending, setRefreshingTrending] = useState(false);
+
+  useEffect(() => {
+    function handleGlobalKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   const handleRefreshTrending = async (force = false) => {
     setRefreshingTrending(true);
@@ -297,40 +309,47 @@ export default function Dashboard() {
             >
               <IconMenu size={18} />
             </button>
-            <span className="topbar-badge">NOTICE BOARD</span>
-            <span className="topbar-divider">/</span>
-            <span className="topbar-active-view">
-              {viewMode === 'trending'
-                ? 'Trending Radar'
-                : viewMode === 'activity'
-                ? 'Intelligence Digest'
-                : (selected ? selected.name : 'Watchlist Overview')}
-            </span>
+            <div className="topbar-breadcrumb">
+              <span className="topbar-workspace-tag">WORKSPACE</span>
+              <span className="topbar-divider">/</span>
+              <span className="topbar-active-view">
+                {viewMode === 'trending'
+                  ? 'Trending Radar'
+                  : viewMode === 'activity'
+                  ? 'Intelligence Digest'
+                  : (selected ? selected.name : 'Watchlist Overview')}
+              </span>
+            </div>
+            <div className="topbar-telemetry-pill">
+              <span className="live-pulse-dot" />
+              <span>RADAR LIVE</span>
+            </div>
           </div>
           <div className="topbar-search">
             <span className="topbar-search-icon" aria-hidden="true">
               <IconSearch size={14} />
             </span>
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="Search topics, circulars, diffs..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Escape') setQuery(''); }}
+              onKeyDown={(e) => { if (e.key === 'Escape') { setQuery(''); searchInputRef.current?.blur(); } }}
               aria-label="Search topics and circulars"
             />
             {query ? (
               <button
                 type="button"
                 className="search-clear-btn"
-                onClick={() => setQuery('')}
+                onClick={() => { setQuery(''); searchInputRef.current?.focus(); }}
                 title="Clear search"
                 aria-label="Clear search"
               >
                 <IconX size={13} />
               </button>
             ) : (
-              <span className="search-kbd-hint">ESC</span>
+              <span className="search-kbd-hint">⌘K</span>
             )}
           </div>
           <div className="topbar-right">
