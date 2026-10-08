@@ -12,8 +12,16 @@ export default function TopicList({ topics, selectedId, onSelect, user, onUpgrad
           {isPro ? 'PRO UNLIMITED' : `${topics.length}/5 MONITORS`}
         </span>
       </div>
+      {!isPro && (
+        <div className="watchlist-capacity-bar" title={`${topics.length} of 5 slots utilized`}>
+          <div
+            className="watchlist-capacity-fill"
+            style={{ width: `${Math.min(100, (topics.length / 5) * 100)}%` }}
+          />
+        </div>
+      )}
       {!isPro && topics.length >= 5 && onUpgradePlan && (
-        <div style={{ padding: '0 4px 8px' }}>
+        <div style={{ padding: '4px 0 8px' }}>
           <button
             type="button"
             className="button button-primary"

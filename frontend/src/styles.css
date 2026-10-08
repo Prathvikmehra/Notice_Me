@@ -461,6 +461,21 @@ a {
   color: var(--brand-primary);
 }
 
+.watchlist-capacity-bar {
+  height: 3px;
+  background: var(--border-subtle);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  margin: 6px 0 10px;
+}
+
+.watchlist-capacity-fill {
+  height: 100%;
+  background: var(--brand-primary);
+  border-radius: var(--radius-pill);
+  transition: width var(--transition-normal);
+}
+
 .topic-link {
   display: flex;
   align-items: center;
