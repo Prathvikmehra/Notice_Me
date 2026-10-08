@@ -7,6 +7,7 @@ import {
   IconFileText,
   IconUser,
   IconChevronDown,
+  IconArrowRight,
 } from './Icons.jsx';
 
 function parseStructuredChange(change) {
@@ -100,7 +101,7 @@ export default function DiffCard({ change, compact = false }) {
   const displayedSources = showAllSources ? sources : sources.slice(0, 2);
 
   return (
-    <article className={`diff-card ${impactClass} ${compact ? 'is-compact' : ''}`}>
+    <article className={`diff-card interactive-card ${impactClass} ${compact ? 'is-compact' : ''}`}>
       <header className="diff-topline">
         <div className="diff-topline-left">
           <span className={`diff-impact-pill ${impactClass}`}>
@@ -158,12 +159,20 @@ export default function DiffCard({ change, compact = false }) {
         {(structured.before || structured.after) && (
           <div className="diff-comparison-grid">
             <div className="diff-box diff-box-before">
-              <span className="diff-box-label">PREVIOUS STATE</span>
+              <div className="diff-box-top">
+                <span className="diff-box-prefix">-</span>
+                <span className="diff-box-label">PREVIOUS STATE</span>
+              </div>
               <span className="diff-box-value">{structured.before || '—'}</span>
             </div>
-            <div className="diff-comparison-arrow" aria-hidden="true">→</div>
+            <div className="diff-comparison-arrow" aria-hidden="true">
+              <IconArrowRight size={14} />
+            </div>
             <div className="diff-box diff-box-after">
-              <span className="diff-box-label">VERIFIED UPDATE</span>
+              <div className="diff-box-top">
+                <span className="diff-box-prefix">+</span>
+                <span className="diff-box-label">VERIFIED UPDATE</span>
+              </div>
               <span className="diff-box-value">{structured.after || '—'}</span>
             </div>
           </div>
