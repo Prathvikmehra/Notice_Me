@@ -14,7 +14,7 @@ import {
   IconFileText,
 } from '../components/Icons.jsx';
 
-export default function LoginPage() {
+export default function LoginPage({ onBackToLanding }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -142,6 +142,15 @@ export default function LoginPage() {
             </div>
 
             <div className="login-card-header">
+              {onBackToLanding && (
+                <button
+                  type="button"
+                  className="login-back-to-landing-btn"
+                  onClick={onBackToLanding}
+                >
+                  <span>← Back to Notice Me</span>
+                </button>
+              )}
               {/* Segmented Auth Mode Switch */}
               <div className="auth-mode-segmented">
                 <button
