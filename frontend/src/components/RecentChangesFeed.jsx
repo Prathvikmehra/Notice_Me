@@ -66,17 +66,17 @@ export default function RecentChangesFeed({ user, topics = [], onSelectTopic }) 
         </div>
 
         <div className="activity-stats-grid">
-          <div className="activity-stat-card is-high">
+          <div className="activity-stat-card interactive-card is-high">
             <span className="stat-label">HIGH IMPACT</span>
             <span className="stat-value">{highCount}</span>
             <span className="stat-desc">Deadlines / Stays</span>
           </div>
-          <div className="activity-stat-card is-medium">
+          <div className="activity-stat-card interactive-card is-medium">
             <span className="stat-label">MODERATE</span>
             <span className="stat-value">{mediumCount}</span>
             <span className="stat-desc">Releases / Orders</span>
           </div>
-          <div className="activity-stat-card is-monitors">
+          <div className="activity-stat-card interactive-card is-monitors">
             <span className="stat-label">MONITORS</span>
             <span className="stat-value">{topics.length}</span>
             <span className="stat-desc">Search + News radar</span>

@@ -187,7 +187,7 @@ export default function TrendingFeed({
           const isBusy = trackingId === item.id;
 
           return (
-            <article key={item.id} className={`trending-card ${item.isPlaceholder ? 'is-placeholder-card' : ''}`}>
+            <article key={item.id} className={`trending-card interactive-card ${item.isPlaceholder ? 'is-placeholder-card' : ''}`}>
               <div className="card-top-meta">
                 <div className="meta-left">
                   <span className={`trending-category-tag cat-${item.category}`}>
