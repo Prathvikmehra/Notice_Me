@@ -589,20 +589,51 @@ a {
   color: var(--text-primary);
 }
 
-.topbar-badge {
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.topbar-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topbar-workspace-tag {
   font-size: 10px;
-  font-weight: 600;
   font-family: var(--font-mono);
+  font-weight: 700;
   letter-spacing: 0.05em;
-  padding: 2px 6px;
+  padding: 3px 7px;
   border-radius: var(--radius-xs);
   background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
   color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.topbar-telemetry-pill {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--status-verified-text);
+  background: var(--status-verified-bg);
+  border: 1px solid var(--status-verified-border);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
 }
 
 .topbar-divider {
   color: var(--border-default);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .topbar-active-view {
