@@ -118,17 +118,17 @@ stateDiagram-v2
     Idle --> Syncing: Minute 50 Pre-fetch / Manual Sync triggered
     
     Syncing --> Unchanged: diff == null
-    Unchanged --> Idle: Preserves previous briefing; zero tokens
+    Unchanged --> Idle: Preserves previous briefing (zero tokens)
     
     Syncing --> Changed: diff != null
-    Changed --> StructuredSynthesis: Gemini generates before/after & impact
+    Changed --> StructuredSynthesis: Gemini generates before/after and impact
     StructuredSynthesis --> AlertPending: Diff stored (alerted=false)
     
     AlertPending --> AlertDelivered: SMTP accepted & delivered
     AlertPending --> DeliveryFailed: SMTP rejected (stays unalerted for retry)
     
     AlertDelivered --> Idle: Timestamp marked in lastAlertedAt
-    DeliveryFailed --> Idle: Logged; retry on next run
+    DeliveryFailed --> Idle: Logged - retry on next run
     
     Idle --> Deleted: User deletes topic
     Deleted --> [*]: Cascade deletes snapshots & diffs
@@ -153,7 +153,7 @@ flowchart LR
         D1["Cron tick: 0 * * * *"] --> D2["Filter topics scheduled for current hour"]
         D2 --> D3{"Pending unalerted diff?"}
         D3 -->|Yes| D4["Immediate Nodemailer SMTP Send"]
-        D3 -->|No (Fresh pull ran)| D5["Update lastAlertedAt"]
+        D3 -->|No - Fresh pull ran| D5["Update lastAlertedAt"]
         D3 -->|Missed Pre-fetch| D6["Fallback On-Demand Sync"]
     end
 
