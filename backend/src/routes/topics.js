@@ -28,8 +28,8 @@ function checkUserSyncRateLimit(userId) {
   const windowMs = 60 * 1000;
   const maxSyncs = 10;
 
-  // Cleanup expired entries periodically to prevent memory leaks
-  if (userSyncHistory.size > 500) {
+  // Cleanup expired entries when map grows
+  if (userSyncHistory.size > 50) {
     for (const [uid, times] of userSyncHistory) {
       const active = times.filter((t) => now - t < windowMs);
       if (active.length === 0) userSyncHistory.delete(uid);
@@ -134,13 +134,26 @@ export function createTopicsRouter(database = getDb) {
   const router = Router();
   const db = () => typeof database === 'function' ? database() : database;
 
+  // In-memory cache for enriched trending topics
+  let enrichedTrendingCache = null;
+  let enrichedTrendingCachedAt = 0;
+  const TRENDING_CACHE_TTL_MS = 30 * 1000;
+
   // Public endpoint for trending tracks (accessible without auth)
   router.get('/trending', attempt(async (req, res) => {
+    const isRefreshRequested = req.query?.refresh === 'true';
+    const now = Date.now();
+
+    if (!isRefreshRequested && enrichedTrendingCache && (now - enrichedTrendingCachedAt < TRENDING_CACHE_TTL_MS)) {
+      res.set('Cache-Control', 'public, max-age=15');
+      return res.json({ trending: enrichedTrendingCache });
+    }
+
     let trending = getCachedTrending();
 
     // If query ?refresh=true requested, force live refresh via SerpApi Trends
     if (!isTestEnv()) {
-      if (req.query?.refresh === 'true') {
+      if (isRefreshRequested) {
         refreshTrendingRadar().catch(() => {});
         trending = getCachedTrending();
       } else if (trending[0]?.lastRefreshed === null) {
@@ -168,11 +181,15 @@ export function createTopicsRouter(database = getDb) {
             followers: count,
           };
         });
+        enrichedTrendingCache = enriched;
+        enrichedTrendingCachedAt = now;
+        res.set('Cache-Control', 'public, max-age=15');
         return res.json({ trending: enriched });
       }
     } catch {
       // Fallback to cached default
     }
+    res.set('Cache-Control', 'public, max-age=15');
     res.json({ trending });
   }));
 
@@ -280,13 +297,13 @@ export function createTopicsRouter(database = getDb) {
         where: topicId ? { topicId } : { topic: { userId: req.user.id } },
         include: { topic: { select: { id: true, name: true } } },
         orderBy: { detectedAt: 'desc' },
-        take: 20,
+        take: topicId ? 6 : 10,
       }),
       client.snapshot.findMany({
         where: topicId ? { topicId } : { topic: { userId: req.user.id } },
         include: { topic: { select: { id: true, name: true, query: true, category: true } } },
         orderBy: { pulledAt: 'desc' },
-        take: 25,
+        take: topicId ? 3 : 5,
       }),
     ]);
 

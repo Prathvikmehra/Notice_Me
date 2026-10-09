@@ -36,14 +36,6 @@ export async function syncTopic(topicId, database = getDb, customClient = null, 
     }
 
     const gemini = customGemini !== undefined ? customGemini : getGeminiClient();
-    if (gemini) {
-      try {
-        const aiBriefing = await gemini.generateBriefing(topic, rawData);
-        if (aiBriefing) rawData.aiBriefing = aiBriefing;
-      } catch (err) {
-        console.warn('Gemini briefing generation skipped:', err.message);
-      }
-    }
 
     // 1. Fetch previous snapshot read-only before opening write transaction
     const previous = await db.snapshot.findFirst({
@@ -57,9 +49,26 @@ export async function syncTopic(topicId, database = getDb, customClient = null, 
 
     if (previous) {
       diffResult = await diff(previous, { rawData, pulledAt: new Date(rawData.pulledAt || Date.now()) });
-      if (diffResult?.summary && diffResult?.sourceUrls?.length) {
-        diffSummary = diffResult.summary;
-        if (gemini) {
+    }
+
+    // Generate AI briefing on baseline, when changes detected, or when previous lacked briefing.
+    // If no changes occurred, reuse previous briefing to eliminate redundant Gemini API token consumption.
+    if (gemini) {
+      if (isBaseline || diffResult !== null || !previous?.rawData?.aiBriefing) {
+        try {
+          const aiBriefing = await gemini.generateBriefing(topic, rawData);
+          if (aiBriefing) rawData.aiBriefing = aiBriefing;
+        } catch (err) {
+          console.warn('Gemini briefing generation skipped:', err.message);
+        }
+      } else if (previous?.rawData?.aiBriefing) {
+        rawData.aiBriefing = previous.rawData.aiBriefing;
+      }
+    }
+
+    if (previous && diffResult?.summary && diffResult?.sourceUrls?.length) {
+      diffSummary = diffResult.summary;
+      if (gemini) {
           try {
             if (typeof gemini.generateStructuredDiff === 'function') {
               const structured = await gemini.generateStructuredDiff(topic, {
@@ -89,7 +98,6 @@ export async function syncTopic(topicId, database = getDb, customClient = null, 
           }
         }
       }
-    }
 
     // 2. Fast atomic write transaction (inserts + retention pruning)
     const { snapshot, change } = await db.$transaction(async (tx) => {

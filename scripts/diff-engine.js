@@ -180,4 +180,16 @@ export function diff(previous, current) {
   };
 }
 
-export default { diff };
+/**
+ * Classifies impact level (HIGH, MEDIUM, LOW) based on notice content keywords.
+ * @param {string} text
+ * @returns {'HIGH' | 'MEDIUM' | 'LOW'}
+ */
+export function classifyImpact(text) {
+  const s = String(text || '').trim();
+  const isCritical = /deadline|last date|cancel|postpone|stay order|court order|cutoff|hall ticket|admit card|urgent|scheduled|verdict/i.test(s);
+  const isModerate = /extend|release|announced|update|fee|apply|eligibility|new result|decision|notification/i.test(s);
+  return isCritical ? 'HIGH' : isModerate ? 'MEDIUM' : 'LOW';
+}
+
+export default { diff, classifyImpact };

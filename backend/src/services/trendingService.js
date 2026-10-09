@@ -219,9 +219,8 @@ export async function refreshTrendingRadar({ client, gemini, logger = console, g
 
   logger.info(`Trending Radar: Starting pre-warm refresh for ${activeTracks.length} public tracks...`);
   let successCount = 0;
-  const updatedTracks = [];
 
-  for (const track of activeTracks) {
+  async function processTrack(track) {
     try {
       const rawData = await apiClient.pullSnapshot(track.query);
       let aiBriefing = null;
@@ -236,7 +235,8 @@ export async function refreshTrendingRadar({ client, gemini, logger = console, g
         try { sourceDomain = new URL(topSearch.link).hostname.replace(/^www\./, ''); } catch {}
       }
 
-      updatedTracks.push({
+      successCount++;
+      return {
         ...track,
         headline: aiBriefing?.coreStatus || topNews?.title || track.headline,
         aiBriefing: aiBriefing || null,
@@ -246,17 +246,24 @@ export async function refreshTrendingRadar({ client, gemini, logger = console, g
         isLive: true,
         badge: track.isPlaceholder ? '⚡ VERIFIED RADAR' : track.badge,
         lastRefreshed: new Date().toISOString(),
-      });
-      successCount++;
+      };
     } catch (err) {
       logger.warn(`Trending Radar: refresh for ${track.name} skipped: ${err.message}`);
-      updatedTracks.push({ ...track, lastRefreshed: new Date().toISOString() });
+      return { ...track, lastRefreshed: new Date().toISOString() };
     }
   }
 
-    if (updatedTracks.length > 0) {
-      cachedTrending = updatedTracks;
-    }
+  const CONCURRENCY = 3;
+  const updatedTracks = [];
+  for (let i = 0; i < activeTracks.length; i += CONCURRENCY) {
+    const chunk = activeTracks.slice(i, i + CONCURRENCY);
+    const chunkResults = await Promise.all(chunk.map(processTrack));
+    updatedTracks.push(...chunkResults);
+  }
+
+  if (updatedTracks.length > 0) {
+    cachedTrending = updatedTracks;
+  }
 
     logger.info(`Trending Radar: Pre-warm completed (${successCount}/${activeTracks.length} refreshed).`);
     return { refreshed: successCount, total: activeTracks.length };

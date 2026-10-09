@@ -1,0 +1,124 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { classifyImpact } from '../scripts/diff-engine.js';
+import { syncTopic } from '../backend/src/services/topicSyncService.js';
+import { createTopicsRouter } from '../backend/src/routes/topics.js';
+
+test('classifyImpact extracts HIGH, MEDIUM, LOW impact tiers consistently', () => {
+  assert.equal(classifyImpact('Application deadline extended to 15th'), 'HIGH');
+  assert.equal(classifyImpact('Exam postponed due to administrative reasons'), 'HIGH');
+  assert.equal(classifyImpact('Admit card download link released on portal'), 'HIGH');
+  assert.equal(classifyImpact('Supreme Court stay order issued on reservation list'), 'HIGH');
+  assert.equal(classifyImpact('Official notification released for 2026 cycle'), 'MEDIUM');
+  assert.equal(classifyImpact('Eligibility criteria revised for junior engineer post'), 'MEDIUM');
+  assert.equal(classifyImpact('Routine periodic status check of search results'), 'LOW');
+});
+
+test('topicSyncService reuses cached aiBriefing and skips Gemini API when no diff occurs', async () => {
+  let geminiCalls = 0;
+  const mockGemini = {
+    generateBriefing: async () => {
+      geminiCalls++;
+      return {
+        coreStatus: 'Fresh briefing',
+        urgency: 'MODERATE',
+        volatilityScore: 50,
+        keyPoints: [],
+        deadlines: [],
+        actionRequired: null,
+      };
+    },
+  };
+
+  const storedBriefing = {
+    coreStatus: 'Baseline briefing preserved',
+    urgency: 'ROUTINE',
+    volatilityScore: 20,
+    keyPoints: [],
+    deadlines: [],
+    actionRequired: null,
+  };
+
+  const snapshotRow = {
+    id: 'snap-1',
+    topicId: 'topic-test',
+    pulledAt: new Date(Date.now() - 3600000),
+    rawData: {
+      search: [{ position: 1, title: 'Same Result', link: 'https://example.com/item', snippet: 'No changes here' }],
+      news: [{ title: 'Same News', link: 'https://example.com/news', source: 'Source', date: 'Yesterday' }],
+      aiBriefing: storedBriefing,
+    },
+  };
+
+  const mockDb = {
+    topic: {
+      findUnique: async () => ({ id: 'topic-test', query: 'same query', name: 'Test Topic' }),
+      update: async () => ({}),
+    },
+    snapshot: {
+      findFirst: async () => snapshotRow,
+      create: async ({ data }) => ({ id: 'snap-2', ...data }),
+      findMany: async () => [],
+      deleteMany: async () => {},
+    },
+    diff: {
+      create: async () => null,
+      findMany: async () => [],
+      deleteMany: async () => {},
+    },
+    async $transaction(fn) {
+      return fn(this);
+    },
+  };
+
+  const mockClient = {
+    pullSnapshot: async () => ({
+      query: 'same query',
+      pulledAt: new Date().toISOString(),
+      search: [{ position: 1, title: 'Same Result', link: 'https://example.com/item', snippet: 'No changes here' }],
+      news: [{ title: 'Same News', link: 'https://example.com/news', source: 'Source', date: 'Yesterday' }],
+    }),
+  };
+
+  const result = await syncTopic('topic-test', () => mockDb, mockClient, mockGemini);
+
+  // Gemini generateBriefing should NOT be called because raw snapshot is unchanged
+  assert.equal(geminiCalls, 0, 'Gemini briefing should be skipped when snapshot has no diff');
+  assert.equal(result.snapshot.rawData.aiBriefing.coreStatus, 'Baseline briefing preserved');
+});
+
+test('trending endpoint caches enriched follower counts across repeat requests', async () => {
+  let dbQueries = 0;
+  const mockDb = {
+    topic: {
+      findMany: async () => {
+        dbQueries++;
+        return [
+          { name: 'UPSC CSE 2026', query: 'UPSC CSE 2026 prelims notification exam date upsc.gov.in' },
+        ];
+      },
+    },
+  };
+
+  const router = createTopicsRouter(() => mockDb);
+  const trendingLayer = router.stack.find((l) => l.route?.path === '/trending' && l.route?.methods?.get);
+  assert.ok(trendingLayer);
+
+  const req = { query: {} };
+  let resHeaders = {};
+  let resData = null;
+  const res = {
+    set: (k, v) => { resHeaders[k] = v; return res; },
+    json: (d) => { resData = d; return res; },
+  };
+
+  // First request hits DB to calculate follower counts
+  await trendingLayer.route.stack[trendingLayer.route.stack.length - 1].handle(req, res, () => {});
+  assert.equal(dbQueries, 1);
+  assert.ok(Array.isArray(resData.trending));
+  assert.equal(resHeaders['Cache-Control'], 'public, max-age=15');
+
+  // Second request uses in-memory cache without hitting database
+  await trendingLayer.route.stack[trendingLayer.route.stack.length - 1].handle(req, res, () => {});
+  assert.equal(dbQueries, 1, 'Repeat trending request within TTL must use in-memory cache');
+});

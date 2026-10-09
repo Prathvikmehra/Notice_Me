@@ -9,9 +9,10 @@ import Logo from '../components/Logo.jsx';
 import TopicDetail from './TopicDetail.jsx';
 import TrendingFeed from '../components/TrendingFeed.jsx';
 import RecentChangesFeed from '../components/RecentChangesFeed.jsx';
-import AIChatModal from '../components/AIChatModal.jsx';
-import ProModal from '../components/ProModal.jsx';
-import ProfileModal from '../components/ProfileModal.jsx';
+
+const AIChatModal = React.lazy(() => import('../components/AIChatModal.jsx'));
+const ProModal = React.lazy(() => import('../components/ProModal.jsx'));
+const ProfileModal = React.lazy(() => import('../components/ProfileModal.jsx'));
 import {
   IconZap,
   IconFileText,
@@ -511,20 +512,32 @@ export default function Dashboard() {
         <span className="floating-hot-dot" />
       </button>
 
-      <AIChatModal
-        isOpen={showChat}
-        onClose={() => setShowChat(false)}
-        activeTopic={viewMode === 'watchlist' ? selected : null}
-        topics={topics}
-      />
+      {showChat && (
+        <React.Suspense fallback={null}>
+          <AIChatModal
+            isOpen={showChat}
+            onClose={() => setShowChat(false)}
+            activeTopic={viewMode === 'watchlist' ? selected : null}
+            topics={topics}
+          />
+        </React.Suspense>
+      )}
 
-      <ProModal isOpen={showProModal} onClose={() => setShowProModal(false)} />
-      <ProfileModal
-        isOpen={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-        userProfile={{ ...userProfile, plan: userPlan, topicCount: topics.length }}
-        onProfileUpdated={handleProfileUpdated}
-      />
+      {showProModal && (
+        <React.Suspense fallback={null}>
+          <ProModal isOpen={showProModal} onClose={() => setShowProModal(false)} />
+        </React.Suspense>
+      )}
+      {showProfileModal && (
+        <React.Suspense fallback={null}>
+          <ProfileModal
+            isOpen={showProfileModal}
+            onClose={() => setShowProfileModal(false)}
+            userProfile={{ ...userProfile, plan: userPlan, topicCount: topics.length }}
+            onProfileUpdated={handleProfileUpdated}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 }

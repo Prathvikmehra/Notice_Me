@@ -21,6 +21,9 @@ async function request(path, options = {}) {
     throw new Error('Cannot reach the Notice Me API. Start the backend and try again.');
   }
   if (response.status === 204) return null;
+  if (response.status === 401) {
+    supabase.auth.signOut().catch(() => {});
+  }
   const result = await response.json().catch(() => null);
   if (!response.ok) throw new Error(result?.error?.message || `Request failed (${response.status}).`);
   return result;

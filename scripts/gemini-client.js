@@ -4,6 +4,8 @@
  * and human-grade diff explanations.
  */
 
+import { classifyImpact } from './diff-engine.js';
+
 const QUOTA_ERROR = /quota|rate.?limit|resource_exhausted|too many requests|429/i;
 
 export function parseGeminiKeys(env = process.env) {
@@ -118,14 +120,14 @@ export function createGeminiClient({
     const searchItems = (rawData.search || []).slice(0, 6).map((s) => ({
       title: s.title,
       link: s.link,
-      snippet: s.snippet,
-      date: s.date,
+      snippet: s.snippet ? s.snippet.slice(0, 140) : '',
+      date: s.date || null,
     }));
 
     const newsItems = (rawData.news || []).slice(0, 6).map((n) => ({
       title: n.title,
       source: n.source,
-      date: n.date,
+      date: n.date || null,
       link: n.link,
     }));
 
@@ -133,10 +135,10 @@ export function createGeminiClient({
 Analyze the following Google Search and Google News records for the topic "${topic.name}" (Category: "${topic.category || 'General'}", Query: "${topic.query}").
 
 Search Records:
-${JSON.stringify(searchItems, null, 2)}
+${JSON.stringify(searchItems)}
 
 News Bulletins:
-${JSON.stringify(newsItems, null, 2)}
+${JSON.stringify(newsItems)}
 
 Synthesize this data into a JSON object with this exact structure:
 {
@@ -165,6 +167,7 @@ Rules:
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.2,
+        maxOutputTokens: 600,
       },
     };
 
@@ -201,9 +204,8 @@ Rules:
 
   function createFallbackStructuredDiff(topic, rawSummary = '', sourceUrls = []) {
     const text = String(rawSummary || '').trim();
-    const isCritical = /deadline|last date|cancel|postpone|stay order|court order|cutoff|hall ticket|admit card|urgent|scheduled|verdict/i.test(text);
-    const isModerate = /extend|release|announced|update|fee|apply|eligibility|new result|decision|notification/i.test(text);
-    const impact = isCritical ? 'HIGH' : isModerate ? 'MEDIUM' : 'LOW';
+    const impact = classifyImpact(text);
+    const isCritical = impact === 'HIGH';
 
     let before = null;
     let after = null;
@@ -290,11 +292,11 @@ Query: "${topic.query}"
 Raw Engine Diff: "${rawSummary || 'New records detected'}"
 
 Previous Snapshot Headlines:
-${JSON.stringify(prevSearch, null, 2)}
+${JSON.stringify(prevSearch)}
 
 Current Snapshot Headlines & News:
-Search: ${JSON.stringify(currSearch, null, 2)}
-News: ${JSON.stringify(currNews, null, 2)}
+Search: ${JSON.stringify(currSearch)}
+News: ${JSON.stringify(currNews)}
 
 In 1-2 crisp, professional sentences, summarize what actually changed or what new development occurred.
 Focus on dates, decisions, releases, postponements, or policy changes.
@@ -354,13 +356,13 @@ Raw Engine Delta:
 "${rawSummary || 'New records detected'}"
 
 Previous Snapshot State:
-${JSON.stringify(prevItems, null, 2)}
+${JSON.stringify(prevItems)}
 
 Current Snapshot State:
-${JSON.stringify(currItems, null, 2)}
+${JSON.stringify(currItems)}
 
 Verified Source Candidates:
-${JSON.stringify(candidateSources.slice(0, 5), null, 2)}
+${JSON.stringify(candidateSources.slice(0, 5))}
 
 Return a JSON object with this exact schema:
 {
@@ -400,6 +402,7 @@ STRICT CONSTRAINTS:
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.2,
+        maxOutputTokens: 750,
       },
     };
 
@@ -567,27 +570,35 @@ Rules:
           actionRequired: raw.aiBriefing.actionRequired,
         } : null,
         overview: raw.overview?.text || null,
-        topSearchSnippets: (raw.search || []).slice(0, 5).map((item) => ({
+        topSearchSnippets: (raw.search || []).slice(0, 3).map((item) => ({
           title: item.title,
-          snippet: item.snippet,
+          snippet: item.snippet ? item.snippet.slice(0, 120) : '',
           link: item.link,
         })),
-        topNewsBulletins: (raw.news || []).slice(0, 5).map((item) => ({
+        topNewsBulletins: (raw.news || []).slice(0, 3).map((item) => ({
           title: item.title,
           source: item.source,
-          snippet: item.snippet,
+          snippet: item.snippet ? item.snippet.slice(0, 120) : '',
           link: item.link,
           date: item.date,
         })),
       };
     }
 
+    const isTrendingQuery = q.toLowerCase().includes('trend');
+    const filteredDiffs = topic
+      ? diffs.filter((d) => d.topicId === topic.id || d.topic?.name === topic.name || !d.topicId).slice(0, 8)
+      : diffs.slice(0, 8);
+    const filteredSnapshots = topic
+      ? snapshots.filter((s) => s.topicId === topic.id || s.topic?.name === topic.name || !s.topicId).slice(0, 4)
+      : snapshots.slice(0, 6);
+
     const contextData = {
       activeTopic: topic ? { id: topic.id, name: topic.name, query: topic.query, category: topic.category } : null,
       allTopics: topics.map((t) => ({ id: t.id, name: t.name, query: t.query })),
-      recentDiffs: diffs.slice(0, 20).map(parseStoredDiff),
-      recentSnapshots: snapshots.slice(0, 15).map(formatSnapshot),
-      trendingRadar: (trending || []).slice(0, 6).map((tr) => ({
+      recentDiffs: filteredDiffs.map(parseStoredDiff),
+      recentSnapshots: filteredSnapshots.map(formatSnapshot),
+      trendingRadar: (isTrendingQuery || !topic ? (trending || []).slice(0, 5) : []).map((tr) => ({
         name: tr.name,
         category: tr.category,
         headline: tr.headline,
@@ -738,7 +749,7 @@ Answer the user's question with authority, precision, and clarity using ONLY the
 ${conversationPrompt}User Question: "${q}"
 
 Monitored Data Context:
-${JSON.stringify(contextData, null, 2)}
+${JSON.stringify(contextData)}
 
 Strict Intelligence Analyst Guidelines:
 1. Grounding: Answer strictly using facts and verified records from the context. If specific details are not in the context, explicitly say:
@@ -760,7 +771,7 @@ Strict Intelligence Analyst Guidelines:
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.2,
-        maxOutputTokens: 1500,
+        maxOutputTokens: 1000,
       },
     };
 

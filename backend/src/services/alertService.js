@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { getFrequencyLabel } from '../../../scripts/frequency.js';
+import { classifyImpact } from '../../../scripts/diff-engine.js';
 
 const SMTP_NAMES = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'ALERT_FROM'];
 
@@ -57,9 +58,8 @@ export function parseDiffSummary(summary, topic = { name: 'Tracked Topic' }, sou
   }
 
   const text = String(summary || '').trim();
-  const isCritical = /deadline|last date|cancel|postpone|stay order|court order|cutoff|hall ticket|admit card|urgent|scheduled|verdict/i.test(text);
-  const isModerate = /extend|release|announced|update|fee|apply|eligibility|new result|decision|notification/i.test(text);
-  const impact = isCritical ? 'HIGH' : isModerate ? 'MEDIUM' : 'LOW';
+  const impact = classifyImpact(text);
+  const isCritical = impact === 'HIGH';
 
   let before = null;
   let after = null;
