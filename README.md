@@ -1,179 +1,258 @@
 # Notice Me
 
-> A stateful change-monitoring agent tracking critical public updates across government schemes, recruitment notifications, and official proceedings.
+> A stateful change-monitoring agent tracking critical public updates across government schemes, entrance exams, recruitment notifications, and judicial proceedings in India.
+
+[![Tests](https://img.shields.io/badge/tests-53%20passing-brightgreen.svg)](#testing--verification)
+[![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-blue.svg)](https://nodejs.org/)
+[![Package Manager](https://img.shields.io/badge/pnpm-9.x-orange.svg)](https://pnpm.io/)
+[![Frontend](https://img.shields.io/badge/react-18.3-61dafb.svg)](https://react.dev/)
+[![Database](https://img.shields.io/badge/postgresql-supabase-3ecf8e.svg)](https://supabase.com/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ---
 
 ## What Notice Me Does
 
-Most search engines and chatbots are **stateless** — they answer a question once and immediately forget. Users are left repeatedly re-searching the same queries every few days to check if an exam deadline was postponed, an eligibility threshold was revised, or a recruitment notification was published.
+Most search engines and chatbots are **stateless** — they answer a question once and immediately forget. Users are left repeatedly re-searching the same queries every few days to check if an exam deadline was postponed, an eligibility threshold was revised, or an admit card link went live.
 
-**Notice Me is stateful by design.**
-- **Registers Tracked Topics:** Users monitor topics of public interest (e.g., government welfare schemes, entrance exams, judicial hearings).
-- **Scheduled Automated Pulls:** Queries SerpApi Google Search and News APIs on a recurring schedule with Gemini AI analysis.
-- **Stateful Snapshot Comparison:** Each fresh snapshot is diffed against the previous snapshot to detect material modifications (dates, numbers, criteria, new documents).
-- **Redline Change Timeline:** Instead of a wall of repetitive search results, users see a dated, source-linked timeline surfacing only what materially changed.
-- **Proactive Alerts:** Delivers email notifications via Nodemailer whenever an actionable update is detected.
+**Notice Me is stateful by design:**
+- **Persistent Monitors:** Users register queries once (e.g., `"UPSC CSE 2026 prelims"`, `"PM-KISAN eligibility"`) via forms or natural language intent.
+- **Automated Collection:** Queries SerpApi Google Search and Google News on customizable schedules (hourly, 3h, daily, weekdays, monthly) with automatic key pool rotation.
+- **Stateful Snapshot Comparison:** Each fresh snapshot is diffed against the previous snapshot to detect material modifications (dates, numbers, criteria, new documents) while suppressing rank jitter.
+- **Structured AI Diff Synthesis:** Gemini synthesizes clear Before/After comparisons, Impact level (`HIGH`, `MEDIUM`, `LOW`), practical significance ("Why It Matters"), affected stakeholders, and verified evidence URLs.
+- **AI Intelligence Analyst:** A conversational copilot grounded strictly in user's monitored snapshots, historical diffs, and official citations with zero hallucinations.
+- **Live Trending Radar:** Tracks Google Trends across India via SerpApi to discover breaking public notices and add them to watchlist with 1 click.
+- **Proactive Alerts:** Delivers rich HTML and text email alerts via Nodemailer whenever an actionable update is detected.
+
+---
+
+## System Architecture
+
+```mermaid
+flowchart TD
+    subgraph Client["Frontend Client (Vite + React 18)"]
+        UI["Dashboard & Watchlist"]
+        AIChat["AI Analyst Copilot"]
+        TrendingUI["Live Trending Radar"]
+        DigestUI["Recent Changes Digest"]
+    end
+
+    subgraph API["Backend Gateway (Express.js on Node 20 ESM)"]
+        AuthMiddleware["Supabase JWT Auth & User Cache"]
+        TopicsRouter["/api/topics (CRUD & Sync)"]
+        ChatRouter["/api/topics/chat (Grounded QA)"]
+        TrendsRouter["/api/topics/trending (Cached Radar)"]
+        UserRouter["/api/user (Profile & Tier)"]
+    end
+
+    subgraph Cron["Background Automation Daemon"]
+        Ticker["Minute Ticker (* * * * *)"]
+        Prefetch["T-10m Pre-fetch (50 * * * *)"]
+        Dispatch["T-0m Instant Dispatch (0 * * * *)"]
+        TrendWarm["Trending Pre-warm (45 7,13,19 * * *)"]
+    end
+
+    subgraph External["External Integrations"]
+        SerpApi["SerpApi (Search, News, Google Trends)"]
+        Gemini["Gemini AI (Briefings, Diffs, Chat)"]
+        DB[(Supabase PostgreSQL / Prisma)]
+        SMTP["Nodemailer (Brevo SMTP Gateway)"]
+    end
+
+    Client <-->|REST API + Bearer JWT| API
+    API <-->|Prisma ORM| DB
+    API <-->|Multi-key Rotation| SerpApi
+    API <-->|Flash Key Pool| Gemini
+    Cron -->|Orchestrates| API
+    Cron -->|Sends Alerts| SMTP
+```
+
+---
+
+## Data Ingestion & Diff Pipeline
+
+```mermaid
+flowchart LR
+    A["Scheduled Run / Manual Sync"] --> B["SerpApi Pull (Search + News)"]
+    B --> C{"Previous Snapshot Exists?"}
+    
+    C -->|No: Baseline| D["Generate Initial AI Briefing"]
+    D --> E["Persist Baseline Snapshot"]
+    
+    C -->|Yes| F["Run diff(previous, current)"]
+    F --> G{"Material Delta Found?"}
+    
+    G -->|No Change| H["Reuse previous.aiBriefing"]
+    H --> I["Persist Snapshot (Zero AI tokens spent)"]
+    
+    G -->|Changes Found| J["Generate Fresh Briefing"]
+    J --> K["Generate Structured Diff via Gemini"]
+    K --> L["Atomic Write (Snapshot + Diff)"]
+    L --> M["Prune Excess History (> retention)"]
+    M --> N["Dispatch Source-Linked Email Alert"]
+```
+
+---
+
+## Key Features
+
+### 1. Grounded AI Intelligence Analyst
+- Chat assistant operating strictly on stored snapshots, diffs, and citations.
+- Selectively switches scope between **All Monitored Topics** or a specific notice.
+- Formats comparisons (`Previous State` vs `Verified Update`), key milestones, and verified source chips.
+- Interactive follow-up suggestion pills for 1-click inquiry progression.
+
+### 2. Natural Language Monitor Extraction
+- Users can type natural prompts like *"Watch GATE 2027 for exam dates and eligibility changes"*.
+- Gemini extracts the clean title (`GATE 2027`), optimized query without boolean noise, relevant category (`exam`), and target source portals.
+
+### 3. Live Trending Public Radar
+- Live discovery powered by SerpApi Google Trends India (`geo=IN`).
+- Automatically categorizes surges (e.g. `Jobs and Education`, `Law and Government`, `Business and Finance`).
+- Enriched with follower counts and pre-warmed AI briefings 3 times daily.
+
+### 4. Deterministic Diff Engine with Noise Guards
+- Compares items by unique destination URL (`link`).
+- Ignores rank position shuffling.
+- **Boundary Churn Guard:** Suppresses false-positive swaps at position 10/11 caused by search engine algorithmic jitter.
+- **Displaced Tail Removal Guard:** Prevents displacing a lower result from incorrectly triggering a removal alert when higher items are inserted.
+
+---
+
+## Token & Performance Optimizations
+
+| Optimization | Implementation | Impact |
+| --- | --- | --- |
+| **Zero-Diff Briefing Reuse** | In `topicSyncService.js`, snapshot diff runs *before* AI briefings. If results are identical, reuses previous briefing. | Eliminates **~95%** redundant Gemini calls on routine cron runs. |
+| **Compact JSON Prompts** | Stripped `null, 2` indentation across all Gemini prompt templates. | **~35% token reduction** across all LLM queries. |
+| **Capped Output Limits** | Bounded `maxOutputTokens` (600 for briefings, 750 for diffs, 1000 for chat). | Eliminates runaway token generation and latency. |
+| **Scoped Chat Context** | Filters context strictly to active topic, slices top 3 search/news items, truncates snippets to 120 chars. | Context payload shrunk from **~12,000 to ~1,200 tokens**. |
+| **Code-Split Frontend Bundles** | Vite manual chunks (`vendor`, `supabase`) and `React.lazy` on pages and modals. | Main entry chunk dropped from **519 kB to 4.87 kB**. |
+| **In-Memory Follower Cache** | 30s cache with `Cache-Control: public, max-age=15` on `/api/topics/trending`. | Eliminates repeat database queries on the trending feed. |
 
 ---
 
 ## Tech Stack
 
-- **Frontend:** React 18, Vite
+- **Frontend:** React 18, Vite (Neo-Brutalist design language with dark/light mode toggle)
 - **Backend:** Node.js (v20+ ES Modules), Express
 - **Database & ORM:** PostgreSQL (Supabase), Prisma ORM
-- **Data Source:** SerpApi (Search API + News API) with automated key rotation
-- **AI Intelligence:** Gemini AI multi-key rotation pool for briefings and change synthesis
-- **Scheduled Jobs:** Integrated node-cron scheduler (T-10m pre-fetch, T-0m dispatch, 3x daily trending radar) and standalone ingestion pipeline (`scripts/pull-and-diff.js`)
-- **Email Delivery:** Nodemailer (SMTP)
-- **Architecture:** npm workspaces (`backend`, `frontend`)
+- **Search Provider:** SerpApi (Search, News, Trending Now) with multi-key pool rotation
+- **AI Models:** Gemini API (`gemini-3.5-flash`) with circular key failover and cooldown
+- **Cron Engine:** `node-cron` with two-phase pre-fetch and dispatch architecture
+- **Email Delivery:** Nodemailer (SMTP / Brevo transactional integration)
+- **Package Manager:** `pnpm` workspaces (`backend`, `frontend`)
 
 ---
 
-## Project Structure
-
-```
-Notice_Me/
-├── docs/
-│   └── snapshot-format.md           # Snapshot rawData contract specification
-├── scripts/
-│   ├── pull-and-diff.js             # Pipeline entry point
-│   ├── serpapi-client.js            # SerpApi client & key rotation
-│   ├── gemini-client.js             # Gemini AI client & key pool rotation
-│   └── diff-engine.js               # Temporal diff comparison engine
-├── backend/
-│   ├── prisma/
-│   │   ├── schema.prisma            # PostgreSQL schema (User, Topic, Snapshot, Diff)
-│   │   └── migrations/              # Database migration history
-│   ├── src/
-│   │   ├── routes/                  # Express API routes (topics, timeline, user)
-│   │   ├── services/                # cronService, topicSyncService, trendingService, alertService, db
-│   │   ├── middleware/              # Auth, rate limiting & error handling middleware
-│   │   └── index.js                 # Express server entry point
-│   ├── .env.example
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   ├── components/              # TopicForm, TopicList, TimelineView, DiffCard, TrendingFeed
-│   │   ├── pages/                   # Dashboard, TopicDetail, LoginPage
-│   │   ├── contexts/                # AuthContext
-│   │   ├── api/                     # API client wrapper
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── .env.example
-│   └── package.json
-├── .gitignore
-├── .env.example
-├── package.json                     # Root workspaces configuration
-└── README.md
-```
-
----
-
-## Setup & Installation
+## Setup & Quickstart
 
 ### 1. Prerequisites
 - **Node.js:** v20.x or higher
-- **npm** or **pnpm**
-- **PostgreSQL / Supabase Database URL**
+- **pnpm:** v9.x or higher (`npm install -g pnpm`)
+- **PostgreSQL Database URL** (e.g., Supabase)
 - **SerpApi API Key(s)**
 - **Gemini API Key(s)**
 
 ### 2. Install Dependencies
-Run from the repository root:
 ```bash
-npm install
+pnpm install
 ```
 
 ### 3. Environment Variables
-Copy `.env.example` to `.env` in the root and in `backend/`:
+Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
-cp backend/.env.example backend/.env
 ```
 
-Populate the following variables:
-- `DATABASE_URL`: Your Supabase PostgreSQL connection string (pooled or direct).
-- `SERPAPI_KEY_1` to `SERPAPI_KEY_5`: SerpApi key pool for automatic key rotation.
-- `GEMINI_API_KEYS`: Comma-separated Gemini API keys for AI synthesis and rotation.
-- `SUPABASE_URL`, `SUPABASE_ANON_KEY`: Supabase authentication configuration.
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `ALERT_FROM`: SMTP credentials for email alerts.
+Configure the following:
+```ini
+DATABASE_URL="postgresql://postgres.xxx:pass@aws-0-region.pooler.supabase.com:6543/postgres?pgbouncer=true"
+SERPAPI_KEY_1="your_serpapi_key_1"
+SERPAPI_KEY_2="your_serpapi_key_2"
+GEMINI_API_KEYS="your_gemini_key_1,your_gemini_key_2"
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_ANON_KEY="your-supabase-anon-key"
+SMTP_HOST="smtp-relay.brevo.com"
+SMTP_PORT=587
+SMTP_USER="your-login@smtp-brevo.com"
+SMTP_PASS="your-smtp-master-key"
+ALERT_FROM="Notice Me <alerts@yourdomain.com>"
+```
 
 ### 4. Database Setup & Migrations
-Generate the Prisma Client:
 ```bash
-npm run prisma:generate
+pnpm prisma:generate
+pnpm prisma:migrate
 ```
 
-Run database migrations against the Supabase database:
+### 5. Running Locally
+
+Start the backend (Express API + Cron Scheduler):
 ```bash
-npm run prisma:migrate
+pnpm backend
+```
+*Runs on `http://127.0.0.1:3000`.*
+
+Start the frontend:
+```bash
+pnpm frontend
+```
+*Runs on `http://localhost:5173`.*
+
+---
+
+## API Summary
+
+| Endpoint | Method | Description | Access |
+| --- | --- | --- | --- |
+| `/health` | `GET` | Health status, uptime, and scheduler heartbeat | Public |
+| `/api/topics/trending` | `GET` | Curated and dynamic Google Trends radar | Public (Cached) |
+| `/api/topics` | `GET`, `POST` | List and create monitored topics | Authenticated |
+| `/api/topics/item/:id` | `GET` | Retrieve single topic details | Authenticated |
+| `/api/topics/:id` | `DELETE` | Cascade delete topic and history | Authenticated |
+| `/api/topics/:id/sync` | `POST` | Trigger on-demand sync with cooldown | Authenticated |
+| `/api/topics/:id/alert-settings` | `POST` | Update notification schedule and email | Authenticated |
+| `/api/topics/:id/timeline` | `GET` | Chronological dated diff history | Authenticated |
+| `/api/topics/:id/snapshots/latest` | `GET` | Most recent snapshot & AI briefing | Authenticated |
+| `/api/topics/recent-changes` | `GET` | Cross-topic watchlist activity feed | Authenticated |
+| `/api/topics/parse-intent` | `POST` | Natural language monitor generator | Authenticated |
+| `/api/topics/chat` | `POST` | Grounded AI Analyst chat assistant | Authenticated |
+| `/api/user/me` | `GET`, `PATCH` | User profile and plan details | Authenticated |
+| `/api/user/upgrade` | `POST` | Upgrade / downgrade tier (Free/Pro) | Authenticated |
+
+*Full documentation available in [`docs/api-reference.md`](docs/api-reference.md).*
+
+---
+
+## Testing & Verification
+
+Run all unit and integration tests:
+```bash
+pnpm test
+```
+
+All **53 tests** execute natively via Node's test runner in under 2 seconds:
+- `diff-engine.test.js`: URL-based diffing, rank jitter suppression, snippet modifications, boundary churn.
+- `diff-service.test.js`: Timeline sorting and pagination.
+- `gemini-client.test.js`: Key pool rotation, 429 quota recovery, fallback diff synthesis.
+- `pipeline.test.js`: Snapshot bounds, multi-key SerpApi failover, transaction rollbacks, retention limits.
+- `product.test.js`: Express routes, validation, and SMTP alert dispatch.
+- `auth-and-expansion.test.js`: Free-tier quota (max 5 topics), session caching, two-phase scheduler.
+- `audit-fixes.test.js`: Urgency extraction, intent parsing, grounded chat, confirmation emails.
+- `optimization-audit.test.js`: Unified impact classifier, zero-diff briefing reuse, trending cache.
+
+Verify production frontend build:
+```bash
+pnpm --filter frontend build
 ```
 
 ---
 
-## Running the Application
+## Documentation Index
 
-### Start Backend Server
-From the root directory:
-```bash
-npm run backend
-```
-*Starts on `http://127.0.0.1:3000` with automated cron jobs running in the background.*
-
-### Start Frontend Client
-From the root directory:
-```bash
-npm run frontend
-```
-*Starts on `http://localhost:5173`.*
-
-Open `http://localhost:5173` to manage topics. The frontend reads `VITE_API_URL` (defaults to `http://localhost:3000`); the backend binds to `127.0.0.1` and accepts the local frontend origin by default. Set `FRONTEND_ORIGIN` in the backend environment if you use a different local origin.
-
-The dashboard lets you track custom topics or monitor curated trending notices, view live AI briefings and deadlines, inspect Search and News sources, read dated changes with citations, and configure scheduled email delivery.
-
-### API responses
-
-| Method and path | Request | Response |
-| --- | --- | --- |
-| `GET /health` | — | `{ "status": "ok" }` |
-| `GET /api/topics` | — | `{ "topics": [...] }` |
-| `POST /api/topics` | `{ "name": "...", "query": "...", "category": "exam" }` | `201 { "topic": {...} }` |
-| `DELETE /api/topics/:id` | — | `204`, deletes that topic and its saved history |
-| `GET /api/topics/trending` | — | `{ "trending": [...] }`, curated public radar tracks |
-| `GET /api/topics/:id/timeline` | — | `{ "topic": {...}, "diffs": [...] }`, newest first |
-| `GET /api/topics/:id/snapshots/latest` | — | `{ "snapshot": {...} }`, or `null` before first pull |
-| `POST /api/topics/:id/sync` | — | Trigger on-demand sync with cooldown and concurrency lock |
-| `POST /api/topics/:id/alert-settings` | `{ "alertEnabled": true, "alertHour": 14 }` | `{ "topic": {...} }` |
-
-Invalid input returns `400`; missing topics return `404`; unavailable email setup returns `409`; rate limit or cooldown returns `429`.
-
-### Run Ingestion & Diff Pipeline Locally
-To manually trigger a data pull and diff run across all tracked topics:
-```bash
-node scripts/pull-and-diff.js
-```
-
-## How the pipeline works
-
-The backend runs an automated scheduler with two-phase pre-fetch (T-10m data gathering + Gemini summary) and instant delivery (T-0m), as well as 3x daily public trending radar refreshes. You can also run the ingestion pipeline directly via `node scripts/pull-and-diff.js`.
-
-For each Topic owned by an authenticated user, the collector requests Google Search (`engine=google`) and Google News (`engine=google_news`). Older seed rows without a `userId` are hidden from the app and excluded from collection and status reports. The collector tries configured `SERPAPI_KEY_1` through `SERPAPI_KEY_5` in order, rotating on HTTP 429 or a quota error. Exhausted keys are skipped for the rest of that run. Logs identify only the key index.
-
-Both responses must contain usable results before any snapshot is written. The collector keeps at most ten results per channel and stores exactly the contract in [`docs/snapshot-format.md`](docs/snapshot-format.md). Google News groups are flattened into articles and publisher objects become publisher names. Missing snippets become empty strings, because Google News may omit them; empty result arrays and malformed articles fail the run.
-
-The previous snapshot is loaded before the new snapshot is inserted. Snapshot creation, comparison through the existing `diff(previous, current)` function, and any Diff insertion share a serializable database transaction. A first snapshot creates no Diff. A diff/database error rolls back that transaction, keeping the baseline intact. Topics completed before a later failure remain stored. Old snapshots are pruned beyond the retention limit (`SNAPSHOT_RETENTION_LIMIT`, default 20) to prevent unbounded storage growth.
-
-For a Topic with `alertEmail` and `alertEnabled: true`, `sendDiffAlert(topic, diff)` sends a source-linked text email through Nodemailer with AI highlights and action recommendations. The Diff is marked `alerted=true` only after SMTP accepts its recipient. Missing SMTP settings fail before collection starts for any email-enabled Topic. Delivery failure leaves the Diff unalerted; subsequent runs retry pending alerts before pulling new data. Enabling alerts through the API is unavailable until SMTP settings are present.
-
-If using Brevo, set `ALERT_FROM` to a verified sender address or an address on an authenticated domain. Brevo's `SMTP_USER` is a technical login and cannot be used as the From address; the collector fails before processing an alert-enabled Topic if it detects that configuration. See [Brevo's SMTP troubleshooting guide](https://help.brevo.com/hc/en-us/articles/115000188150-Troubleshooting-Issues-with-Brevo-SMTP). A successful SMTP `250 queued` response is not proof of inbox delivery; inspect Brevo's **Transactional → Logs** for the Delivered, Blocked, Deferred, or Bounce event.
-
-### Validation, quota, and testing
-
-```bash
-npm test
-```
-
-Tests use mock API/database/SMTP dependencies only inside test files; they require no live credentials.
-
-Each full collection normally makes two SerpApi requests per Topic. At four scheduled runs per day, the 30-day estimate is **240 requests per Topic**, or **720 requests for three Topics / 960 for four Topics**, before manual runs and retries. Each run logs request attempts and successful responses by key index. These counters are not SerpApi billed usage; check each account's SerpApi dashboard for remaining quota.
+- **[`docs/architecture.md`](docs/architecture.md)** — System architecture, sequence diagrams, lifecycle states, ER model.
+- **[`docs/api-reference.md`](docs/api-reference.md)** — Complete REST API reference with schemas and examples.
+- **[`docs/diff-rules.md`](docs/diff-rules.md)** — Diff engine rules, noise suppression, and structured AI schemas.
+- **[`docs/snapshot-format.md`](docs/snapshot-format.md)** — Snapshot raw data specification and contracts.
+- **[`docs/deployment.md`](docs/deployment.md)** — Production deployment guide (Supabase, Render, Vercel, Brevo).

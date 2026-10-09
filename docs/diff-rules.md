@@ -1,10 +1,34 @@
-# Notice Me — Diff Engine Rules
+# Notice Me — Diff Engine Rules & Delta Specification
 
 ## Overview
 
 Notice Me is a stateful change-monitoring agent. Unlike search engines and chatbots that retrieve data once and immediately forget, Notice Me tracks changes over time by comparing periodic search and news snapshots against their last known state.
 
-The Diff Engine (`scripts/diff-engine.js`) evaluates two snapshots—`previous` and `current`—and extracts only **material, actionable updates** while discarding search noise.
+The Diff Engine (`scripts/diff-engine.js`) evaluates two snapshots—`previous` and `current`—and extracts only **material, actionable updates** while discarding search engine ranking noise.
+
+---
+
+## Diff Decision Pipeline
+
+```mermaid
+flowchart TD
+    Start["diff(previous, current)"] --> CheckPrev{"previous is null?"}
+    CheckPrev -->|Yes: First Snapshot| NullOut["Return null (Baseline Captured)"]
+    
+    CheckPrev -->|No| BuildMap["Index items by destination URL (link)"]
+    BuildMap --> FindNew["Detect New URLs (in current, not in previous)"]
+    BuildMap --> FindRemoved["Detect Removed URLs (in previous, not in current)"]
+    BuildMap --> FindModified["Compare identical URLs (title, snippet, date)"]
+
+    FindModified --> ChurnCheck{"Only boundary churn at rank >= 10?"}
+    ChurnCheck -->|Yes: Algorithm jitter| NullOut
+    
+    ChurnCheck -->|No| FilterDisplaced["Filter displaced tail items (rank >= 10)"]
+    FilterDisplaced --> CountChanges{"Any material changes left?"}
+    
+    CountChanges -->|No| NullOut
+    CountChanges -->|Yes| OutputDiff["Return { summary, sourceUrls }"]
+```
 
 ---
 
@@ -26,7 +50,7 @@ A diff is recorded (`{ summary, sourceUrls }`) when any of the following occur:
 - **Citation:** The new URL is appended to `sourceUrls`.
 
 ### 2. Removed Result
-- **Condition:** A URL that was present in the previous snapshot no longer appears in the top results of the current snapshot.
+- **Condition:** A URL that was present in the previous snapshot no longer appears in the top results of the current snapshot (and was not simply displaced by an insertion at rank 10).
 - **Plain Language Summary:** `Removed result: <title>`
 - **Citation:** The removed URL is appended to `sourceUrls`.
 
@@ -48,34 +72,80 @@ Where `<site>` is extracted from the publisher source name if available (e.g., "
 
 ---
 
-## What is Ignored (Noise Filtering)
+## Noise Filtering & False-Positive Guards
 
-The diff engine deliberately filters out transient noise that does not represent real-world bureaucratic or factual changes:
+```mermaid
+flowchart LR
+    subgraph Jitter["Search Engine Jitter"]
+        Rank10["Item at Rank 10"] <-->|Position Jitter| Rank11["Item at Rank 11"]
+    end
+    
+    subgraph Guard["Boundary Churn Guard"]
+        Check["Both items rank >= 10 with zero text deltas"] --> Suppress["Suppress Diff (Return null)"]
+    end
+```
 
 1. **Rank Position Reordering:**
-   - Web search rankings constantly fluctuate by a position or two due to search engine algorithmic adjustments.
    - If position 1 and position 2 swap ranks but their URLs, titles, snippets, and dates remain identical, the diff engine treats this as **no change** and returns `null`.
 
-2. **First Snapshot Baseline:**
-   - When a topic is first tracked, `previous` is `null`.
-   - The diff engine returns `null` because there is no prior state to compare against; this first pull serves as the initial baseline.
+2. **Boundary Rank Churn Guard (Rank >= 10):**
+   - When result sets reach max window size (>= 10 items), items at the bottom edge frequently bounce between rank 10 and 11 due to algorithmic search jitter.
+   - If the *only* difference across full windows is a bottom-boundary swap with zero modifications elsewhere, the engine suppresses the false-positive diff.
 
-3. **Pull Timestamps and Query Metadata:**
-   - Ingestion timestamps (`pulledAt`) and query strings (`query`) belong to the scraper run, not the underlying content. They are excluded from content diffing.
+3. **Displaced Tail Removal Filtering:**
+   - If a new breaking item enters at rank 1–9, the 10th item is pushed to rank 11. The engine recognizes this displacement and avoids reporting the displaced 10th item as "Removed" if higher-rank additions caused the shift.
 
-4. **Whitespace Variations:**
-   - Leading and trailing whitespace in titles, snippets, and URLs are trimmed before comparison to prevent false positives from formatting quirks.
+4. **First Snapshot Baseline:**
+   - When a topic is first tracked, `previous` is `null`. The diff engine returns `null` because this first pull establishes the baseline.
 
-5. **No Detected Changes:**
-   - If none of the above conditions produce a material change, `diff(previous, current)` returns `null`.
+5. **Whitespace & Formatting Normalization:**
+   - Whitespace and punctuation variations are trimmed before comparison to prevent false positives.
 
 ---
 
-## Output Contract
+## Impact Classification Matrix (`classifyImpact`)
+
+The diff engine exports a unified impact classifier used across alerts and AI briefings:
+
+```mermaid
+flowchart TD
+    NoticeText["Notice or Diff Text"] --> MatchCritical{"Matches Deadlines / Cancellations / Verdicts / Admit Cards?"}
+    MatchCritical -->|Yes| HighImpact["HIGH IMPACT (Urgent Action Required)"]
+    
+    MatchCritical -->|No| MatchModerate{"Matches Extensions / Releases / Eligibility / Circulars?"}
+    MatchModerate -->|Yes| MedImpact["MEDIUM IMPACT (Important Administrative Update)"]
+    
+    MatchModerate -->|No| LowImpact["LOW IMPACT (Routine Periodic Status)"]
+```
+
+```javascript
+export function classifyImpact(text): 'HIGH' | 'MEDIUM' | 'LOW'
+```
+
+---
+
+## AI Structured Diff Synthesis
+
+When Gemini is active, `generateStructuredDiff` enhances the raw diff output into a structured intelligence document:
 
 ```typescript
-type DiffResult = {
-  summary: string;       // Human-readable change log separated by newlines
-  sourceUrls: string[];  // Deduplicated list of source links backing each change
-} | null;
+type StructuredDiff = {
+  headline: string;        // E.g. "Application deadline extended by 7 days"
+  explanation: string;     // 1-2 crisp executive sentences
+  before: string | null;   // Previous state/date
+  after: string | null;    // Updated state/date
+  whyItMatters: string;    // Practical significance for citizen/applicant
+  whoIsAffected: string | null; // Impacted target group
+  actionRequired: string | null; // Next steps
+  impact: 'HIGH' | 'MEDIUM' | 'LOW';
+  whyAmISeeingThis: string[];   // Grounding rationale
+  evidence: Array<{
+    title: string;
+    url: string;
+    domain: string;
+    sourceType: 'Official Portal' | 'News Bulletin' | 'Web Source';
+    date: string | null;
+    excerpt: string;
+  }>;
+};
 ```

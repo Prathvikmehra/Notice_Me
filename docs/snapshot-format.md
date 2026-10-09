@@ -5,32 +5,97 @@
 This document specifies the exact JSON contract for `Snapshot.rawData` stored in the database.
 It serves as the boundary interface between the ingestion pipeline (`scripts/pull-and-diff.js`, `scripts/serpapi-client.js`) and the diff engine (`scripts/diff-engine.js`, `backend/src/services/diffService.js`).
 
+```mermaid
+classDiagram
+    class SnapshotRawData {
+        +string query
+        +string pulledAt
+        +SearchResult[] search
+        +NewsResult[] news
+        +AiBriefing aiBriefing
+        +Overview overview
+    }
+    class SearchResult {
+        +int position
+        +string title
+        +string link
+        +string snippet
+        +string date
+    }
+    class NewsResult {
+        +string title
+        +string link
+        +string source
+        +string date
+        +string snippet
+    }
+    class AiBriefing {
+        +string coreStatus
+        +string urgency
+        +int volatilityScore
+        +object[] keyPoints
+        +object[] deadlines
+        +string actionRequired
+        +string tag
+    }
+    class Overview {
+        +string type
+        +string label
+        +string text
+        +string source
+    }
+
+    SnapshotRawData o-- SearchResult : top 10
+    SnapshotRawData o-- NewsResult : top 10
+    SnapshotRawData o-- AiBriefing : optional
+    SnapshotRawData o-- Overview : optional
+```
+
 ---
 
 ## Schema Definition
 
 ```typescript
 type SnapshotRawData = {
-  query: string;         // Search query passed to SerpApi
-  pulledAt: string;      // ISO 8601 timestamp (e.g. "2026-09-28T06:00:00.000Z")
-  search: SearchResult[]; // Top 10 organic search results
-  news: NewsResult[];     // Top 10 news results
+  query: string;           // Search query passed to SerpApi
+  pulledAt: string;        // ISO 8601 timestamp (e.g. "2026-09-28T06:00:00.000Z")
+  search: SearchResult[];  // Top 10 organic search results
+  news: NewsResult[];      // Top 10 news results
+  aiBriefing?: AiBriefing; // Executive AI synthesis generated via Gemini
+  overview?: Overview;     // Optional Google AI Overview / Answer box from SerpApi
 };
 
 type SearchResult = {
-  position: number;      // Result ranking index (1-based)
-  title: string;         // Result headline/title
-  link: string;          // Source destination URL
-  snippet: string;       // Text snippet returned by SerpApi
-  date: string | null;   // Date string if provided by Google, otherwise null
+  position: number;        // Result ranking index (1-based)
+  title: string;           // Result headline/title
+  link: string;            // Source destination URL
+  snippet: string;         // Text snippet returned by SerpApi
+  date: string | null;     // Date string if provided by Google, otherwise null
 };
 
 type NewsResult = {
-  title: string;         // Article title
-  link: string;          // Article URL
-  source: string;        // Publisher / news outlet name
-  date: string;          // Publication timestamp / relative date string
-  snippet: string;       // News description / snippet
+  title: string;           // Article title
+  link: string;            // Article URL
+  source: string;          // Publisher / news outlet name
+  date: string;            // Publication timestamp / relative date string
+  snippet: string;         // News description / snippet
+};
+
+type AiBriefing = {
+  coreStatus: string;      // 2-sentence executive verification summary
+  urgency: 'CRITICAL' | 'MODERATE' | 'ROUTINE';
+  volatilityScore: number; // 1-100 dynamics score
+  keyPoints: Array<{ badge: string; text: string }>;
+  deadlines: Array<{ title: string; date: string; urgency: string }>;
+  actionRequired: string | null;
+  tag: string;
+};
+
+type Overview = {
+  type: 'ai_overview' | 'answer_box';
+  label: string;
+  text: string;
+  source: string;
 };
 ```
 
