@@ -336,7 +336,7 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
                 {nameError && <p className="form-error" role="alert">{nameError}</p>}
                 {nameMessage && <p className="form-success" role="status">{nameMessage}</p>}
                 
-                <div style={{ display: 'flex', gap: '8px', margin: '8px 0 16px' }}>
+                <div className="profile-name-row">
                   <input 
                     id="profile-name-input"
                     type="text" 
@@ -348,7 +348,7 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
                   />
                   <button 
                     type="submit" 
-                    className="button button-primary"
+                    className="button button-primary profile-save-btn"
                     disabled={savingName}
                   >
                     {savingName ? 'Saving…' : 'Save'}
@@ -398,7 +398,7 @@ export default function ProfileModal({ isOpen, onClose, userProfile, onProfileUp
               </div>
 
               {/* Visual Theme Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="profile-theme-grid">
                 {/* Light Theme Card */}
                 <div 
                   className={`search-topic-card ${!isDark ? 'is-active-theme' : ''}`}

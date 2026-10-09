@@ -401,7 +401,7 @@ export default function Dashboard() {
         {error && <p className="form-error page-error" role="alert">{error}</p>}
         {query.trim().length >= 2 ? (
           <div className="search-results-panel">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div className="search-header-row">
               <div>
                 <div className="section-label">SEARCH RESULTS</div>
                 <h2 style={{ margin: '4px 0 0', fontSize: '18px', fontWeight: 700 }}>Results for “{query.trim()}”</h2>
