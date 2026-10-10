@@ -8,6 +8,52 @@ import { classifyImpact } from './diff-engine.js';
 
 const QUOTA_ERROR = /quota|rate.?limit|resource_exhausted|too many requests|429/i;
 
+export function safeParseJson(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const text = raw.trim();
+
+  // 1. Direct parse attempt
+  try {
+    return JSON.parse(text);
+  } catch {}
+
+  // 2. Strip markdown fences: ```json ... ``` or ``` ... ```
+  const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  try {
+    return JSON.parse(stripped);
+  } catch {}
+
+  // 3. Extract JSON object substring between first '{' and last '}'
+  const start = stripped.indexOf('{');
+  const end = stripped.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try {
+      return JSON.parse(stripped.slice(start, end + 1));
+    } catch {}
+  }
+
+  // 4. Attempt repair for truncated JSON ending prematurely
+  if (start !== -1) {
+    let candidate = stripped.slice(start);
+    const quotes = (candidate.match(/"/g) || []).length;
+    if (quotes % 2 !== 0) candidate += '"';
+
+    const openBraces = (candidate.match(/{/g) || []).length;
+    const closeBraces = (candidate.match(/}/g) || []).length;
+    const openBrackets = (candidate.match(/\[/g) || []).length;
+    const closeBrackets = (candidate.match(/]/g) || []).length;
+
+    if (openBrackets > closeBrackets) candidate += ']'.repeat(openBrackets - closeBrackets);
+    if (openBraces > closeBraces) candidate += '}'.repeat(openBraces - closeBraces);
+
+    try {
+      return JSON.parse(candidate);
+    } catch {}
+  }
+
+  return null;
+}
+
 export function parseGeminiKeys(env = process.env) {
   const keys = [];
   if (env.GEMINI_API_KEYS) {
@@ -167,7 +213,7 @@ Rules:
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.2,
-        maxOutputTokens: 600,
+        maxOutputTokens: 1024,
       },
     };
 
@@ -175,7 +221,7 @@ Rules:
     if (!rawJson) return null;
 
     try {
-      const parsed = JSON.parse(rawJson);
+      const parsed = safeParseJson(rawJson);
       if (typeof parsed?.coreStatus === 'string') {
         let urgency = typeof parsed.urgency === 'string' ? parsed.urgency.toUpperCase().trim() : null;
         if (!['CRITICAL', 'MODERATE', 'ROUTINE'].includes(urgency)) {
@@ -409,7 +455,7 @@ STRICT CONSTRAINTS:
     const rawJson = await callGemini(payload);
     if (rawJson) {
       try {
-        const parsed = JSON.parse(rawJson);
+        const parsed = safeParseJson(rawJson);
         if (parsed?.headline && parsed?.explanation) {
           const impact = ['HIGH', 'MEDIUM', 'LOW'].includes(parsed.impact?.toUpperCase())
             ? parsed.impact.toUpperCase()
@@ -502,7 +548,7 @@ Rules:
     const rawJson = await callGemini(payload);
     if (rawJson) {
       try {
-        const parsed = JSON.parse(rawJson);
+        const parsed = safeParseJson(rawJson);
         if (parsed?.name && parsed?.query) {
           const allowedCategories = ['scheme', 'exam', 'recruitment', 'case', 'policy', 'admission', 'other'];
           const category = allowedCategories.includes(parsed.category) ? parsed.category : 'other';

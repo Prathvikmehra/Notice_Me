@@ -23,6 +23,7 @@
     "prisma:migrate": "prisma migrate dev --schema=backend/prisma/schema.prisma",
     "pull-and-diff": "node scripts/pull-and-diff.js",
     "ingest": "node scripts/pull-and-diff.js",
+    "test:smtp": "node scripts/test-smtp.js",
     "test": "node --experimental-vm-modules --test tests/*.test.js"
   },
   "dependencies": {

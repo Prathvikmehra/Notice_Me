@@ -7,7 +7,6 @@ const SMTP_NAMES = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'ALERT_F
 export function isAlertConfigured(env = process.env) {
   return SMTP_NAMES.every((name) => typeof env[name] === 'string' && env[name].trim());
 }
-
 function cleanExplanation(text) {
   if (!text || typeof text !== 'string') return '';
   const lines = text
@@ -39,6 +38,48 @@ function sanitizeTextValue(val) {
   }
   s = s.replace(/^["'`]|["'`]$/g, '').trim();
   return s || null;
+}
+
+export function getTransportOptions(env = process.env) {
+  const port = Number(env.SMTP_PORT);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('SMTP_PORT must be a valid port.');
+
+  const isSecure = env.SMTP_SECURE !== undefined
+    ? (String(env.SMTP_SECURE).toLowerCase() === 'true' || env.SMTP_SECURE === true)
+    : port === 465;
+
+  const options = {
+    host: env.SMTP_HOST,
+    port,
+    secure: isSecure,
+    requireTLS: port !== 465,
+    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+    family: Number(env.SMTP_FAMILY || 4),
+    connectionTimeout: Number(env.SMTP_CONNECTION_TIMEOUT || 15000),
+    greetingTimeout: Number(env.SMTP_GREETING_TIMEOUT || 15000),
+    socketTimeout: Number(env.SMTP_SOCKET_TIMEOUT || 30000),
+  };
+
+  if (env.SMTP_SERVICE) {
+    options.service = env.SMTP_SERVICE;
+  }
+
+  return options;
+}
+
+export function createMailTransport(env = process.env, createTransport = nodemailer.createTransport) {
+  return createTransport(getTransportOptions(env));
+}
+
+export async function verifySmtpConnection({ env = process.env, createTransport = nodemailer.createTransport } = {}) {
+  if (!isAlertConfigured(env)) {
+    throw new Error(`Email delivery requires ${SMTP_NAMES.join(', ')}.`);
+  }
+  const transport = createMailTransport(env, createTransport);
+  if (typeof transport.verify === 'function') {
+    return await transport.verify();
+  }
+  return true;
 }
 
 export function parseDiffSummary(summary, topic = { name: 'Tracked Topic' }, sourceUrls = []) {
@@ -117,16 +158,7 @@ export async function sendDiffAlert(topic, diff, { env = process.env, createTran
   if (!topic?.alertEmail || !diff?.summary || !Array.isArray(diff.sourceUrls)) {
     throw new Error('An alert requires a recipient, summary, and source URLs.');
   }
-  const port = Number(env.SMTP_PORT);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('SMTP_PORT must be a valid port.');
-
-  const transport = createTransport({
-    host: env.SMTP_HOST,
-    port,
-    secure: port === 465,
-    requireTLS: port !== 465,
-    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
-  });
+  const transport = createTransport(getTransportOptions(env));
 
   const subject = String(topic.name || 'Tracked topic').replace(/[\r\n]/g, ' ').trim();
   const structured = parseDiffSummary(diff.summary, topic, diff.sourceUrls);
@@ -269,16 +301,7 @@ export async function sendInitialAlert(topic, snapshot, { env = process.env, cre
     ...searchResults.slice(0, 2).map((s) => s.link),
   ].filter(Boolean);
 
-  const port = Number(env.SMTP_PORT);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('SMTP_PORT must be a valid port.');
-
-  const transport = createTransport({
-    host: env.SMTP_HOST,
-    port,
-    secure: port === 465,
-    requireTLS: port !== 465,
-    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
-  });
+  const transport = createTransport(getTransportOptions(env));
 
   const subject = String(topic.name || 'Tracked topic').replace(/[\r\n]/g, ' ').trim();
   const alertHour = topic.alertHour ?? 12;
@@ -330,16 +353,7 @@ export async function sendAlertConfirmationEmail(topic, { env = process.env, cre
     throw new Error('An alert confirmation requires a recipient email.');
   }
 
-  const port = Number(env.SMTP_PORT);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('SMTP_PORT must be a valid port.');
-
-  const transport = createTransport({
-    host: env.SMTP_HOST,
-    port,
-    secure: port === 465,
-    requireTLS: port !== 465,
-    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
-  });
+  const transport = createTransport(getTransportOptions(env));
 
   const subject = String(topic.name || 'Tracked topic').replace(/[\r\n]/g, ' ').trim();
   const alertHour = topic.alertHour ?? 12;

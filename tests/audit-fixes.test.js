@@ -491,3 +491,61 @@ test('queryMonitoredChat answers questions grounded in monitored data', async ()
   assert.equal(res.grounded, true);
   assert.equal(res.sources[0].url, 'https://gate.iitr.ac.in');
 });
+
+test('getTransportOptions configures IPv4 family, timeouts, and port security correctly', async () => {
+  const { getTransportOptions, verifySmtpConnection } = await import('../backend/src/services/alertService.js');
+
+  // Test 587 default
+  const env587 = {
+    SMTP_HOST: 'smtp.gmail.com',
+    SMTP_PORT: '587',
+    SMTP_USER: 'test@example.com',
+    SMTP_PASS: 'secret',
+    ALERT_FROM: 'Alerts <test@example.com>',
+  };
+  const opts587 = getTransportOptions(env587);
+  assert.equal(opts587.port, 587);
+  assert.equal(opts587.secure, false);
+  assert.equal(opts587.requireTLS, true);
+  assert.equal(opts587.family, 4);
+  assert.equal(opts587.connectionTimeout, 15000);
+
+  // Test 465 SSL default
+  const env465 = {
+    SMTP_HOST: 'smtp.gmail.com',
+    SMTP_PORT: '465',
+    SMTP_USER: 'test@example.com',
+    SMTP_PASS: 'secret',
+    ALERT_FROM: 'Alerts <test@example.com>',
+  };
+  const opts465 = getTransportOptions(env465);
+  assert.equal(opts465.port, 465);
+  assert.equal(opts465.secure, true);
+  assert.equal(opts465.requireTLS, false);
+  assert.equal(opts465.family, 4);
+
+  // Test custom overrides
+  const envCustom = {
+    ...env587,
+    SMTP_SECURE: 'true',
+    SMTP_FAMILY: '6',
+    SMTP_SERVICE: 'gmail',
+  };
+  const optsCustom = getTransportOptions(envCustom);
+  assert.equal(optsCustom.secure, true);
+  assert.equal(optsCustom.family, 6);
+  assert.equal(optsCustom.service, 'gmail');
+
+  // Test verifySmtpConnection
+  let verified = false;
+  const mockTransport = () => ({
+    verify: async () => {
+      verified = true;
+      return true;
+    },
+  });
+  const res = await verifySmtpConnection({ env: env465, createTransport: mockTransport });
+  assert.equal(res, true);
+  assert.equal(verified, true);
+});
+

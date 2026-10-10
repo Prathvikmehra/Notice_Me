@@ -367,6 +367,9 @@ export function createTopicsRouter(database = getDb) {
       if (topic.alertEnabled && topic.alertEmail && alertService.isAlertConfigured()) {
         alertService.sendAlertConfirmationEmail(topic).catch((err) => {
           console.warn(`[Alert] Confirmation email failed for topic "${topic.name}":`, err.message);
+          if (err.message?.includes('timeout') || err.code === 'ETIMEDOUT') {
+            console.warn(`[Alert Diagnostic] SMTP connection timed out (${process.env.SMTP_HOST}:${process.env.SMTP_PORT}). Check if port 465 (SSL) is needed, verify credentials, or test with scripts/test-smtp.js.`);
+          }
         });
       }
     }
@@ -471,7 +474,12 @@ export function createTopicsRouter(database = getDb) {
       console.log(`[Alert] Sending activation confirmation email to ${topic.alertEmail} for "${topic.name}"...`);
       alertService.sendAlertConfirmationEmail(topic)
         .then(() => console.log(`[Alert] Successfully delivered confirmation email to ${topic.alertEmail} for "${topic.name}".`))
-        .catch((err) => console.warn(`[Alert] Confirmation email failed for topic "${topic.name}":`, err.message));
+        .catch((err) => {
+          console.warn(`[Alert] Confirmation email failed for topic "${topic.name}":`, err.message);
+          if (err.message?.includes('timeout') || err.code === 'ETIMEDOUT') {
+            console.warn(`[Alert Diagnostic] SMTP connection timed out (${process.env.SMTP_HOST}:${process.env.SMTP_PORT}). Check if port 465 (SSL) is needed, verify credentials, or test with scripts/test-smtp.js.`);
+          }
+        });
     }
 
     res.json({ topic });
