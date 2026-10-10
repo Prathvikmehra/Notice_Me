@@ -122,3 +122,69 @@ test('trending endpoint caches enriched follower counts across repeat requests',
   await trendingLayer.route.stack[trendingLayer.route.stack.length - 1].handle(req, res, () => {});
   assert.equal(dbQueries, 1, 'Repeat trending request within TTL must use in-memory cache');
 });
+
+test('sendMailWithFailover automatically fails over from port 587 to port 465 on timeout', async () => {
+  const { sendMailWithFailover } = await import('../backend/src/services/alertService.js');
+
+  const attempts = [];
+  const mockCreateTransport = (opts) => {
+    attempts.push(opts.port);
+    return {
+      sendMail: async (mail) => {
+        if (opts.port === 587) {
+          const timeoutErr = new Error('Connection timeout');
+          timeoutErr.code = 'ETIMEDOUT';
+          throw timeoutErr;
+        }
+        return { accepted: [mail.to], messageId: 'msg-465' };
+      },
+    };
+  };
+
+  const testEnv = {
+    SMTP_HOST: 'smtp-relay.brevo.com',
+    SMTP_PORT: '587',
+    SMTP_USER: 'test@example.com',
+    SMTP_PASS: 'secret',
+    ALERT_FROM: 'Notice Me <test@example.com>',
+  };
+
+  const res = await sendMailWithFailover(
+    { to: 'recipient@example.com', text: 'Test alert' },
+    { env: testEnv, createTransport: mockCreateTransport }
+  );
+
+  assert.equal(res.messageId, 'msg-465');
+  assert.deepEqual(attempts, [587, 465], 'Should first attempt configured port 587 then failover to port 465');
+});
+
+test('safeParseJson correctly repairs truncated nested array-of-objects JSON', async () => {
+  const { safeParseJson } = await import('../scripts/gemini-client.js');
+
+  const truncated = '```json\n{ "headline": "Exam date extended", "evidence": [ { "title": "Portal", "url": "https://gov.in"';
+  const parsed = safeParseJson(truncated);
+
+  assert.ok(parsed);
+  assert.equal(parsed.headline, 'Exam date extended');
+  assert.equal(parsed.evidence[0].title, 'Portal');
+  assert.equal(parsed.evidence[0].url, 'https://gov.in');
+});
+
+test('filterEligibleTopics allows topics with unalerted diffs to retry on subsequent hours', async () => {
+  const { filterEligibleTopics } = await import('../backend/src/services/cronService.js');
+
+  const topicWithPendingDiff = {
+    id: 't-1',
+    alertEnabled: true,
+    alertEmail: 'user@example.com',
+    alertHour: 14, // Scheduled for 14:00
+    alertFrequency: '1d',
+    timezone: 'Asia/Kolkata',
+    lastAlertedAt: '2026-10-08T14:00:00Z', // 2 days ago
+    diffs: [{ id: 'd-1', alerted: false }], // Waiting diff
+  };
+
+  // Run at hour 17 on Friday (3 hours after scheduled 14:00 due to earlier timeout/restart)
+  const eligible = filterEligibleTopics([topicWithPendingDiff], new Date('2026-10-09T11:30:00Z'), { targetHour: 17 });
+  assert.equal(eligible.length, 1, 'Topic with pending unalerted diff should be eligible for retry on later hour');
+});

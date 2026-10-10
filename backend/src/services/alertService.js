@@ -40,19 +40,22 @@ function sanitizeTextValue(val) {
   return s || null;
 }
 
-export function getTransportOptions(env = process.env) {
-  const port = Number(env.SMTP_PORT);
+export function getTransportOptions(env = process.env, overridePort = null) {
+  const defaultPort = Number(env.SMTP_PORT || 587);
+  const port = overridePort !== null ? Number(overridePort) : defaultPort;
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('SMTP_PORT must be a valid port.');
 
-  const isSecure = env.SMTP_SECURE !== undefined
-    ? (String(env.SMTP_SECURE).toLowerCase() === 'true' || env.SMTP_SECURE === true)
-    : port === 465;
+  const isSecure = overridePort !== null
+    ? overridePort === 465
+    : (env.SMTP_SECURE !== undefined
+      ? (String(env.SMTP_SECURE).toLowerCase() === 'true' || env.SMTP_SECURE === true)
+      : port === 465);
 
   const options = {
     host: env.SMTP_HOST,
     port,
     secure: isSecure,
-    requireTLS: port !== 465,
+    requireTLS: !isSecure,
     auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
     family: Number(env.SMTP_FAMILY || 4),
     connectionTimeout: Number(env.SMTP_CONNECTION_TIMEOUT || 15000),
@@ -67,17 +70,55 @@ export function getTransportOptions(env = process.env) {
   return options;
 }
 
-export function createMailTransport(env = process.env, createTransport = nodemailer.createTransport) {
-  return createTransport(getTransportOptions(env));
+export function createMailTransport(env = process.env, createTransport = nodemailer.createTransport, overridePort = null) {
+  return createTransport(getTransportOptions(env, overridePort));
+}
+
+export async function sendMailWithFailover(mailOptions, { env = process.env, createTransport = nodemailer.createTransport } = {}) {
+  const primaryPort = Number(env.SMTP_PORT || 587);
+  const primaryTransport = createMailTransport(env, createTransport, primaryPort);
+
+  try {
+    return await primaryTransport.sendMail(mailOptions);
+  } catch (err) {
+    const isTimeoutOrConnError = /timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ESOCKETTIMEDOUT|greeting/i.test(err.message || '') ||
+      ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ESOCKETTIMEDOUT'].includes(err.code);
+
+    if (isTimeoutOrConnError) {
+      const alternatePort = primaryPort === 465 ? 587 : 465;
+      console.warn(`[Alert] SMTP delivery on port ${primaryPort} failed (${err.message}). Attempting automatic failover via port ${alternatePort}...`);
+      try {
+        const fallbackTransport = createMailTransport(env, createTransport, alternatePort);
+        return await fallbackTransport.sendMail(mailOptions);
+      } catch (fallbackErr) {
+        console.error(`[Alert] SMTP failover on port ${alternatePort} also failed:`, fallbackErr.message);
+        throw fallbackErr;
+      }
+    }
+    throw err;
+  }
 }
 
 export async function verifySmtpConnection({ env = process.env, createTransport = nodemailer.createTransport } = {}) {
   if (!isAlertConfigured(env)) {
     throw new Error(`Email delivery requires ${SMTP_NAMES.join(', ')}.`);
   }
-  const transport = createMailTransport(env, createTransport);
+  const primaryPort = Number(env.SMTP_PORT || 587);
+  const transport = createMailTransport(env, createTransport, primaryPort);
   if (typeof transport.verify === 'function') {
-    return await transport.verify();
+    try {
+      return await transport.verify();
+    } catch (err) {
+      const isTimeout = /timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ESOCKETTIMEDOUT|greeting/i.test(err.message || '') ||
+        ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ESOCKETTIMEDOUT'].includes(err.code);
+      if (isTimeout) {
+        const alternatePort = primaryPort === 465 ? 587 : 465;
+        console.warn(`[Alert] SMTP verification on port ${primaryPort} failed (${err.message}). Retrying via port ${alternatePort}...`);
+        const fallbackTransport = createMailTransport(env, createTransport, alternatePort);
+        return await fallbackTransport.verify();
+      }
+      throw err;
+    }
   }
   return true;
 }
@@ -158,7 +199,6 @@ export async function sendDiffAlert(topic, diff, { env = process.env, createTran
   if (!topic?.alertEmail || !diff?.summary || !Array.isArray(diff.sourceUrls)) {
     throw new Error('An alert requires a recipient, summary, and source URLs.');
   }
-  const transport = createTransport(getTransportOptions(env));
 
   const subject = String(topic.name || 'Tracked topic').replace(/[\r\n]/g, ' ').trim();
   const structured = parseDiffSummary(diff.summary, topic, diff.sourceUrls);
@@ -267,13 +307,13 @@ export async function sendDiffAlert(topic, diff, { env = process.env, createTran
     </div>
   `;
 
-  const result = await transport.sendMail({
+  const result = await sendMailWithFailover({
     from: env.ALERT_FROM,
     to: topic.alertEmail,
     subject: `Notice Me update: ${subject} — ${impactIcon} ${structured.headline || 'Change detected'}`,
     text: bodyLines.join('\n'),
     html,
-  });
+  }, { env, createTransport });
 
   if (!Array.isArray(result?.accepted) || !result.accepted.includes(topic.alertEmail) ||
       (Array.isArray(result?.rejected) && result.rejected.length > 0)) {
@@ -300,8 +340,6 @@ export async function sendInitialAlert(topic, snapshot, { env = process.env, cre
     ...newsResults.slice(0, 3).map((n) => n.link),
     ...searchResults.slice(0, 2).map((s) => s.link),
   ].filter(Boolean);
-
-  const transport = createTransport(getTransportOptions(env));
 
   const subject = String(topic.name || 'Tracked topic').replace(/[\r\n]/g, ' ').trim();
   const alertHour = topic.alertHour ?? 12;
@@ -330,12 +368,12 @@ export async function sendInitialAlert(topic, snapshot, { env = process.env, cre
     `Starting tomorrow, scheduled alerts will be delivered at ${hourLabel} on weekdays when new changes are detected.`,
   ].join('\n');
 
-  const result = await transport.sendMail({
+  const result = await sendMailWithFailover({
     from: env.ALERT_FROM,
     to: topic.alertEmail,
     subject: `Notice Me Intelligence: ${subject}`,
     text: body,
-  });
+  }, { env, createTransport });
 
   if (!Array.isArray(result?.accepted) || !result.accepted.includes(topic.alertEmail) ||
       (Array.isArray(result?.rejected) && result.rejected.length > 0)) {
@@ -352,8 +390,6 @@ export async function sendAlertConfirmationEmail(topic, { env = process.env, cre
   if (!topic?.alertEmail) {
     throw new Error('An alert confirmation requires a recipient email.');
   }
-
-  const transport = createTransport(getTransportOptions(env));
 
   const subject = String(topic.name || 'Tracked topic').replace(/[\r\n]/g, ' ').trim();
   const alertHour = topic.alertHour ?? 12;
@@ -413,13 +449,13 @@ export async function sendAlertConfirmationEmail(topic, { env = process.env, cre
     </div>
   `;
 
-  const result = await transport.sendMail({
+  const result = await sendMailWithFailover({
     from: env.ALERT_FROM,
     to: topic.alertEmail,
     subject: `Notice Me: Email Alerts Activated for “${subject}”`,
     text: body,
     html,
-  });
+  }, { env, createTransport });
 
   if (!Array.isArray(result?.accepted) || !result.accepted.includes(topic.alertEmail) ||
       (Array.isArray(result?.rejected) && result.rejected.length > 0)) {

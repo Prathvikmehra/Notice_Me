@@ -32,19 +32,49 @@ export function safeParseJson(raw) {
     } catch {}
   }
 
-  // 4. Attempt repair for truncated JSON ending prematurely
+  // 4. Robust stack-based repair for truncated JSON ending prematurely
   if (start !== -1) {
-    let candidate = stripped.slice(start);
-    const quotes = (candidate.match(/"/g) || []).length;
-    if (quotes % 2 !== 0) candidate += '"';
+    let candidate = stripped.slice(start).replace(/\\+$/, '');
+    let inString = false;
+    let escaped = false;
+    const stack = [];
 
-    const openBraces = (candidate.match(/{/g) || []).length;
-    const closeBraces = (candidate.match(/}/g) || []).length;
-    const openBrackets = (candidate.match(/\[/g) || []).length;
-    const closeBrackets = (candidate.match(/]/g) || []).length;
+    for (let i = 0; i < candidate.length; i++) {
+      const char = candidate[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === '{' || char === '[') {
+          stack.push(char);
+        } else if (char === '}' && stack[stack.length - 1] === '{') {
+          stack.pop();
+        } else if (char === ']' && stack[stack.length - 1] === '[') {
+          stack.pop();
+        }
+      }
+    }
 
-    if (openBrackets > closeBrackets) candidate += ']'.repeat(openBrackets - closeBrackets);
-    if (openBraces > closeBraces) candidate += '}'.repeat(openBraces - closeBraces);
+    if (inString) candidate += '"';
+    candidate = candidate.replace(/,\s*$/, '');
+    if (/:\s*"?$/.test(candidate)) {
+      candidate = candidate.replace(/:\s*"?$/, ': null');
+    }
+
+    while (stack.length > 0) {
+      const top = stack.pop();
+      if (top === '{') candidate += '}';
+      else if (top === '[') candidate += ']';
+    }
 
     try {
       return JSON.parse(candidate);
@@ -137,6 +167,15 @@ export function createGeminiClient({
 
       if (data?.error) {
         const errMsg = String(data.error.message || '');
+        if (response.status === 400 && payload?.generationConfig?.thinkingConfig) {
+          logger.warn(`Gemini key index ${index} rejected thinkingConfig (HTTP 400); retrying without thinkingConfig.`);
+          const fallbackPayload = {
+            ...payload,
+            generationConfig: { ...payload.generationConfig },
+          };
+          delete fallbackPayload.generationConfig.thinkingConfig;
+          return callGemini(fallbackPayload);
+        }
         if (QUOTA_ERROR.test(errMsg) || data.error.code === 429) {
           logger.warn(`Gemini key index ${index} quota exceeded: ${errMsg}; rotating.`);
           current.cooldownUntil = Date.now() + 60_000;
@@ -213,7 +252,8 @@ Rules:
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.2,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 1500,
+        thinkingConfig: { thinkingBudget: 0 },
       },
     };
 
@@ -353,7 +393,8 @@ Output ONLY the 1-2 sentence explanation.`;
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.2,
-        maxOutputTokens: 250,
+        maxOutputTokens: 500,
+        thinkingConfig: { thinkingBudget: 0 },
       },
     };
 
@@ -448,7 +489,8 @@ STRICT CONSTRAINTS:
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.2,
-        maxOutputTokens: 750,
+        maxOutputTokens: 2048,
+        thinkingConfig: { thinkingBudget: 0 },
       },
     };
 
@@ -542,6 +584,8 @@ Rules:
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.1,
+        maxOutputTokens: 1024,
+        thinkingConfig: { thinkingBudget: 0 },
       },
     };
 
@@ -817,7 +861,8 @@ Strict Intelligence Analyst Guidelines:
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.2,
-        maxOutputTokens: 1000,
+        maxOutputTokens: 2048,
+        thinkingConfig: { thinkingBudget: 0 },
       },
     };
 
