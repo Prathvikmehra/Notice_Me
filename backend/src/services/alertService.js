@@ -63,11 +63,48 @@ export function getTransportOptions(env = process.env, overridePort = null) {
     socketTimeout: Number(env.SMTP_SOCKET_TIMEOUT || 30000),
   };
 
+  if (env.SMTP_REQUIRE_TLS !== undefined) {
+    options.requireTLS = String(env.SMTP_REQUIRE_TLS).toLowerCase() === 'true';
+  }
+
+  if (env.SMTP_REJECT_UNAUTHORIZED !== undefined) {
+    options.tls = {
+      rejectUnauthorized: String(env.SMTP_REJECT_UNAUTHORIZED).toLowerCase() !== 'false',
+    };
+  }
+
   if (env.SMTP_SERVICE) {
     options.service = env.SMTP_SERVICE;
   }
 
   return options;
+}
+
+export function isRecipientAccepted(result, email) {
+  if (!result || typeof result !== 'object') return false;
+  const target = String(email || '').toLowerCase().trim();
+  if (!target) return false;
+
+  // Check if explicitly rejected
+  if (Array.isArray(result.rejected) && result.rejected.length > 0) {
+    const isRejected = result.rejected.some((r) => String(r).toLowerCase().replace(/[<>]/g, '').trim() === target);
+    if (isRejected) return false;
+  }
+
+  // Check accepted array (case-insensitive and stripping angle brackets)
+  if (Array.isArray(result.accepted) && result.accepted.length > 0) {
+    const acceptedSet = result.accepted.map((a) => String(a).toLowerCase().replace(/[<>]/g, '').trim());
+    if (acceptedSet.includes(target) || acceptedSet.some((a) => target.includes(a) || a.includes(target))) {
+      return true;
+    }
+  }
+
+  // If transport confirmed delivery via messageId and no rejections occurred
+  if (result.messageId && (!Array.isArray(result.rejected) || result.rejected.length === 0)) {
+    return true;
+  }
+
+  return false;
 }
 
 export function createMailTransport(env = process.env, createTransport = nodemailer.createTransport, overridePort = null) {
@@ -81,7 +118,7 @@ export async function sendMailWithFailover(mailOptions, { env = process.env, cre
   try {
     return await primaryTransport.sendMail(mailOptions);
   } catch (err) {
-    const isTimeoutOrConnError = /timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ESOCKETTIMEDOUT|greeting/i.test(err.message || '') ||
+    const isTimeoutOrConnError = /timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ESOCKETTIMEDOUT|greeting|closed|network/i.test(err.message || '') ||
       ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ESOCKETTIMEDOUT'].includes(err.code);
 
     if (isTimeoutOrConnError) {
@@ -315,8 +352,7 @@ export async function sendDiffAlert(topic, diff, { env = process.env, createTran
     html,
   }, { env, createTransport });
 
-  if (!Array.isArray(result?.accepted) || !result.accepted.includes(topic.alertEmail) ||
-      (Array.isArray(result?.rejected) && result.rejected.length > 0)) {
+  if (!isRecipientAccepted(result, topic.alertEmail)) {
     throw new Error('SMTP server did not accept the alert recipient.');
   }
   return true;
@@ -375,8 +411,7 @@ export async function sendInitialAlert(topic, snapshot, { env = process.env, cre
     text: body,
   }, { env, createTransport });
 
-  if (!Array.isArray(result?.accepted) || !result.accepted.includes(topic.alertEmail) ||
-      (Array.isArray(result?.rejected) && result.rejected.length > 0)) {
+  if (!isRecipientAccepted(result, topic.alertEmail)) {
     throw new Error('SMTP server did not accept the alert recipient.');
   }
   return true;
@@ -457,8 +492,7 @@ export async function sendAlertConfirmationEmail(topic, { env = process.env, cre
     html,
   }, { env, createTransport });
 
-  if (!Array.isArray(result?.accepted) || !result.accepted.includes(topic.alertEmail) ||
-      (Array.isArray(result?.rejected) && result.rejected.length > 0)) {
+  if (!isRecipientAccepted(result, topic.alertEmail)) {
     throw new Error('SMTP server did not accept the alert confirmation recipient.');
   }
   return true;

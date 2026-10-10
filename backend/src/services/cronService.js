@@ -136,7 +136,7 @@ export function filterEligibleTopics(candidates = [], now = new Date(), options 
     }
 
     // 4. Interval & frequency check:
-    if (t.lastAlertedAt) {
+    if (t.lastAlertedAt && !hasPendingUnalertedDiff) {
       if (isSubDaily) {
         const elapsedMs = now.getTime() - new Date(t.lastAlertedAt).getTime();
         const requiredMs = freqHours * 60 * 60 * 1000;
@@ -183,12 +183,27 @@ export async function prefetchUpcomingTopics({ db, client, gemini, logger = cons
 
   // Look ahead 10 minutes for pre-fetch
   const targetTime = new Date(now.getTime() + 10 * 60 * 1000);
-  const candidates = await activeDb.topic.findMany({
-    where: {
-      alertEnabled: true,
-      alertEmail: { not: null },
-    },
-  });
+  let candidates = [];
+  try {
+    candidates = await activeDb.topic.findMany({
+      where: {
+        alertEnabled: true,
+        alertEmail: { not: null },
+      },
+      include: {
+        diffs: {
+          where: { alerted: false },
+        },
+      },
+    });
+  } catch {
+    candidates = await activeDb.topic.findMany({
+      where: {
+        alertEnabled: true,
+        alertEmail: { not: null },
+      },
+    });
+  }
 
   const topics = filterEligibleTopics(candidates, now, { checkTime: targetTime });
   if (topics.length === 0) return { prefetched: 0, targetTime, total: 0 };
@@ -223,12 +238,27 @@ export async function dispatchDueAlerts({ db, client, gemini, logger = console, 
     throw new Error('Database client with topic model is required');
   }
 
-  const candidates = await activeDb.topic.findMany({
-    where: {
-      alertEnabled: true,
-      alertEmail: { not: null },
-    },
-  });
+  let candidates = [];
+  try {
+    candidates = await activeDb.topic.findMany({
+      where: {
+        alertEnabled: true,
+        alertEmail: { not: null },
+      },
+      include: {
+        diffs: {
+          where: { alerted: false },
+        },
+      },
+    });
+  } catch {
+    candidates = await activeDb.topic.findMany({
+      where: {
+        alertEnabled: true,
+        alertEmail: { not: null },
+      },
+    });
+  }
 
   const topics = filterEligibleTopics(candidates, now);
   if (topics.length === 0) return { checked: 0, alerted: 0 };
@@ -258,6 +288,16 @@ export async function dispatchDueAlerts({ db, client, gemini, logger = console, 
       if (pendingDiffs.length > 0) {
         if (!alertService.isAlertConfigured()) {
           logger.warn(`Cron [Dispatch]: SMTP not configured; skipping email dispatch for topic ${topic.id}`);
+          if (typeof activeDb.diff?.updateMany === 'function') {
+            await activeDb.diff.updateMany({
+              where: { id: { in: pendingDiffs.map((d) => d.id) } },
+              data: { alerted: true },
+            });
+          } else {
+            for (const d of pendingDiffs) {
+              await activeDb.diff.update({ where: { id: d.id }, data: { alerted: true } });
+            }
+          }
           await activeDb.topic.update({ where: { id: topic.id }, data: { lastAlertedAt: now } });
           return;
         }
@@ -318,7 +358,7 @@ export async function processDueTopics(params = {}) {
  * Pulls fresh data, computes diff, sends email (diff alert or initial briefing), and marks lastAlertedAt.
  * Strictly verifies alertEnabled: true before syncing or emailing.
  */
-export async function processInitialTopicAlerts({ db, client, logger = console, minAgeMs = Number(process.env.INITIAL_ALERT_DELAY_MS || 10 * 60 * 1000) } = {}) {
+export async function processInitialTopicAlerts({ db, client, gemini, logger = console, minAgeMs = Number(process.env.INITIAL_ALERT_DELAY_MS || 10 * 60 * 1000) } = {}) {
   const activeDb = typeof db === 'function' ? db() : (db || getDb());
   if (!activeDb?.topic) return { checked: 0, alerted: 0 };
 
@@ -338,7 +378,12 @@ export async function processInitialTopicAlerts({ db, client, logger = console, 
   const eligible = pending.filter((t) => {
     if (!t.alertEmail || !t.alertEnabled || t.lastAlertedAt) return false;
     const created = t.createdAt ? new Date(t.createdAt).getTime() : 0;
-    return Date.now() - created >= minAgeMs;
+    const ageMs = Date.now() - created;
+    if (ageMs < minAgeMs) return false;
+    // For retries beyond the initial check, throttle to every 5 minutes to avoid hammering
+    const extraMinutes = Math.floor((ageMs - minAgeMs) / 60000);
+    if (extraMinutes > 0 && extraMinutes % 5 !== 0) return false;
+    return true;
   });
 
   if (eligible.length === 0) return { checked: 0, alerted: 0 };
@@ -353,7 +398,28 @@ export async function processInitialTopicAlerts({ db, client, logger = console, 
       if (!freshTopic || !freshTopic.alertEnabled || !freshTopic.alertEmail || freshTopic.lastAlertedAt) {
         continue;
       }
-      const syncResult = await syncTopic(freshTopic.id, activeDb, apiClient);
+
+      // Check if a baseline snapshot was already captured recently (e.g. at topic creation time < 15 min ago)
+      let latestSnapshot = null;
+      if (typeof activeDb.snapshot?.findFirst === 'function') {
+        latestSnapshot = await activeDb.snapshot.findFirst({
+          where: { topicId: freshTopic.id },
+          orderBy: [{ pulledAt: 'desc' }, { id: 'desc' }],
+        });
+      }
+
+      const snapshotAgeMs = latestSnapshot?.pulledAt
+        ? (Date.now() - new Date(latestSnapshot.pulledAt).getTime())
+        : Infinity;
+
+      let syncResult;
+      if (latestSnapshot && snapshotAgeMs < 15 * 60 * 1000) {
+        // Reuse recent baseline snapshot without consuming duplicate SerpApi search credits
+        syncResult = { snapshot: latestSnapshot, diff: null, topic: freshTopic };
+      } else {
+        syncResult = await syncTopic(freshTopic.id, activeDb, apiClient, gemini);
+      }
+
       if (!syncResult.diff && alertService.isAlertConfigured()) {
         await alertService.sendInitialAlert(freshTopic, syncResult.snapshot);
         await activeDb.topic.update({
@@ -374,6 +440,15 @@ export async function processInitialTopicAlerts({ db, client, logger = console, 
       }
     } catch (err) {
       logger.error(`Cron: error during 10-min initial alert for topic ${topic.id}: ${err.message}`);
+      // Avoid permanent log spam if recipient address fails continuously for over 2 hours
+      const createdTime = topic.createdAt ? new Date(topic.createdAt).getTime() : 0;
+      if (createdTime && (Date.now() - createdTime > 2 * 60 * 60 * 1000)) {
+        logger.warn(`Cron: initial alert for topic ${topic.id} exceeded retry limit; marking lastAlertedAt to avoid indefinite polling.`);
+        await activeDb.topic.update({
+          where: { id: topic.id },
+          data: { lastAlertedAt: new Date() },
+        }).catch(() => {});
+      }
     }
   }
 
@@ -468,6 +543,7 @@ export function startCronScheduler(database = getDb, { client, gemini, enabled =
       await processInitialTopicAlerts({
         db: typeof dbProvider === 'function' ? dbProvider() : dbProvider,
         client: apiClient,
+        gemini: geminiClient,
         logger,
       });
     } catch (err) {

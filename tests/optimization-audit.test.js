@@ -188,3 +188,86 @@ test('filterEligibleTopics allows topics with unalerted diffs to retry on subseq
   const eligible = filterEligibleTopics([topicWithPendingDiff], new Date('2026-10-09T11:30:00Z'), { targetHour: 17 });
   assert.equal(eligible.length, 1, 'Topic with pending unalerted diff should be eligible for retry on later hour');
 });
+
+test('isRecipientAccepted normalizes case, removes angle brackets, and validates messageId', async () => {
+  const { isRecipientAccepted } = await import('../backend/src/services/alertService.js');
+
+  // Case normalization
+  assert.equal(isRecipientAccepted({ accepted: ['john.doe@example.com'] }, 'John.Doe@Example.COM'), true);
+  // Angle bracket stripping
+  assert.equal(isRecipientAccepted({ accepted: ['<john.doe@example.com>'] }, 'john.doe@example.com'), true);
+  // MessageId fallback without rejection
+  assert.equal(isRecipientAccepted({ messageId: 'msg-123', rejected: [] }, 'john.doe@example.com'), true);
+  // Rejection check
+  assert.equal(isRecipientAccepted({ rejected: ['john.doe@example.com'] }, 'john.doe@example.com'), false);
+});
+
+test('safeParseJson repairs truncated JSON ending with an incomplete trailing key', async () => {
+  const { safeParseJson } = await import('../scripts/gemini-client.js');
+
+  const incompleteKey = '{"headline": "Application extended", "whyItMatters';
+  const parsed = safeParseJson(incompleteKey);
+
+  assert.ok(parsed);
+  assert.equal(parsed.headline, 'Application extended');
+  assert.equal(parsed.whyItMatters, undefined);
+});
+
+test('processInitialTopicAlerts reuses recent baseline snapshot to prevent redundant SerpApi search calls', async () => {
+  const { processInitialTopicAlerts } = await import('../backend/src/services/cronService.js');
+
+  let serpCalls = 0;
+  let sentAlert = null;
+
+  const mockDb = {
+    topic: {
+      findMany: async () => [{
+        id: 't-recent',
+        name: 'GATE 2027',
+        alertEmail: 'candidate@example.org',
+        alertEnabled: true,
+        lastAlertedAt: null,
+        createdAt: new Date(Date.now() - 10.5 * 60 * 1000), // Exactly crosses 10-minute threshold
+      }],
+      findUnique: async () => ({
+        id: 't-recent',
+        name: 'GATE 2027',
+        alertEmail: 'candidate@example.org',
+        alertEnabled: true,
+        lastAlertedAt: null,
+        createdAt: new Date(Date.now() - 10.5 * 60 * 1000),
+      }),
+      update: async () => ({}),
+    },
+    snapshot: {
+      findFirst: async () => ({
+        id: 'snap-1',
+        topicId: 't-recent',
+        pulledAt: new Date(Date.now() - 11 * 60 * 1000), // Baseline was pulled 11 min ago at creation
+        rawData: { search: [{ title: 'GATE Notification', link: 'https://gate.iit.ac.in' }], news: [] },
+      }),
+    },
+    diff: {
+      findUnique: async () => null,
+    },
+  };
+
+  const mockClient = {
+    pullSnapshot: async () => {
+      serpCalls++;
+      return { search: [], news: [] };
+    },
+  };
+
+  const silentLogger = { info: () => {}, warn: () => {}, error: () => {} };
+
+  const res = await processInitialTopicAlerts({
+    db: mockDb,
+    client: mockClient,
+    logger: silentLogger,
+    minAgeMs: 10 * 60 * 1000,
+  });
+
+  assert.equal(serpCalls, 0, 'Should reuse recent snapshot without invoking SerpApi pullSnapshot');
+  assert.equal(res.checked, 1);
+});

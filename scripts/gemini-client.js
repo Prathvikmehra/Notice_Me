@@ -70,6 +70,16 @@ export function safeParseJson(raw) {
       candidate = candidate.replace(/:\s*"?$/, ': null');
     }
 
+    // If inside an object and the last token is an unassigned key (e.g. `{"a": 1, "incomplete_key"`),
+    // remove the trailing key so valid JSON is produced
+    if (stack[stack.length - 1] === '{') {
+      if (/,\s*"[^"]*"\s*$/.test(candidate)) {
+        candidate = candidate.replace(/,\s*"[^"]*"\s*$/, '');
+      } else if (/\{\s*"[^"]*"\s*$/.test(candidate)) {
+        candidate = candidate.replace(/"[^"]*"\s*$/, '');
+      }
+    }
+
     while (stack.length > 0) {
       const top = stack.pop();
       if (top === '{') candidate += '}';
